@@ -6,4 +6,67 @@ datasource db {
   provider = "postgresql"
 }
 
-// Etapa 3 adiciona os models (User, Deck, Card, DeckCard) aqui.
+// Perfil do usuario. A autenticacao (senha, sessao, etc) e' toda gerenciada
+// pela Supabase Auth, no schema auth.* - fora do nosso controle e por isso
+// nao modelada aqui. id referencia auth.users(id) por uma FK que existe no
+// banco (ver schema.sql), mas o Prisma nao precisa conhecer a tabela do
+// outro lado pra isso funcionar.
+model User {
+  id        String   @id @db.Uuid
+  name      String   @db.VarChar(120)
+  email     String   @unique @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  decks Deck[]
+
+  @@map("users")
+}
+
+// Cache de cartas vindas da Scryfall (mtg) / Pokemon TCG API (pokemon).
+// Estrategia cache-aside: so grava aqui quando alguem busca uma carta que
+// ainda nao existe no banco.
+model Card {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalId String   @map("external_id") @db.VarChar(120)
+  game       String   @db.VarChar(20)
+  name       String   @db.VarChar(255)
+  imageUrl   String   @map("image_url")
+  text       String?
+  rawData    Json     @map("raw_data")
+  fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
+
+  deckCards DeckCard[]
+
+  @@unique([externalId, game])
+  @@map("cards")
+}
+
+model Deck {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  name       String   @db.VarChar(120)
+  game       String   @db.VarChar(20)
+  visibility String   @default("private") @db.VarChar(10)
+  shareToken String?  @default(dbgenerated("gen_random_uuid()")) @unique @map("share_token") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deckCards DeckCard[]
+
+  @@map("decks")
+}
+
+// Tabela de juncao: quantas copias de cada carta em cada deck.
+model DeckCard {
+  deckId   String @map("deck_id") @db.Uuid
+  cardId   String @map("card_id") @db.Uuid
+  quantity Int    @default(1) @db.SmallInt
+
+  deck Deck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@id([deckId, cardId])
+  @@map("deck_cards")
+}
