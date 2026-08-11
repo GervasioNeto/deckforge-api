@@ -10,14 +10,19 @@
 
 -- ------------------------------------------------------------
 -- CORE: usuários
+-- Autenticação é feita pela Supabase Auth (schema auth.*, fora do
+-- nosso controle). Esta tabela é o "perfil" público do usuário,
+-- com id igual ao id gerado pela Supabase Auth. email é uma cópia
+-- de conveniência (populada por trigger em auth.users, não gravada
+-- pela aplicação) — a fonte da verdade do email continua sendo a
+-- Supabase Auth.
 -- ------------------------------------------------------------
 CREATE TABLE users (
-  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name          VARCHAR(120) NOT NULL,
-  email         VARCHAR(255) NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  id         UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  name       VARCHAR(120) NOT NULL,
+  email      VARCHAR(255) NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------
@@ -64,6 +69,23 @@ CREATE TABLE deck_cards (
   quantity SMALLINT NOT NULL DEFAULT 1 CHECK (quantity > 0),
   PRIMARY KEY (deck_id, card_id)
 );
+
+-- ------------------------------------------------------------
+-- SEGURANÇA: Row Level Security
+-- Toda tabela em public.* é exposta via API REST do Supabase
+-- (PostgREST) para as roles anon/authenticated. Habilitar RLS
+-- sem nenhuma policy bloqueia esse acesso por completo — só a
+-- role postgres (usada pelo Prisma via DATABASE_URL/DIRECT_URL,
+-- que faz BYPASSRLS por ser superuser) continua enxergando os
+-- dados. Isso força TODO acesso a passar pelo backend Express.
+-- Se algum dia o frontend precisar ler direto via supabase-js
+-- (ex: feature de chat realtime), a policy específica pra isso
+-- é criada só naquele momento, não antes.
+-- ------------------------------------------------------------
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE decks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deck_cards ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================
 -- EXTENSÃO FUTURA: coleção pessoal + troca de cartas

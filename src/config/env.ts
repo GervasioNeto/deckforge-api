@@ -11,4 +11,5 @@ function required(name: string, fallback?: string): string {
 export const env = {
   nodeEnv: required("NODE_ENV", "development"),
   port: Number(required("PORT", "3333")),
+  databaseUrl: required("DATABASE_URL"),
 };

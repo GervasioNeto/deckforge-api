@@ -1,0 +1,9 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Etapa 3 adiciona os models (User, Deck, Card, DeckCard) aqui.
