@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { searchCardByName } from "./providers/scryfall.provider";
+import { getCardByName } from "./cards.service";
 
 export const cardsRoutes = Router();
 
 cardsRoutes.get("/cards", async (req, res) => {
+    console.log("=== REQUISICAO CHEGOU ===");
   try {
     const { name } = req.query;
 
@@ -13,7 +14,7 @@ cardsRoutes.get("/cards", async (req, res) => {
       });
     }
 
-    const card = await searchCardByName(name);
+    const card = await getCardByName(name);
 
     return res.status(200).json(card);
   } catch (error) {

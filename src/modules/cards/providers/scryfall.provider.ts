@@ -1,6 +1,6 @@
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 
-function mapScryfallCard(raw: any) {
+export function mapScryfallCard(raw: any) {
   return {
     id: raw.id,
     name: raw.name,
@@ -25,5 +25,5 @@ const data = (await response.json()) as any;
     throw new Error(`Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`);
   }
 
-  return mapScryfallCard(data);
+  return data;
 }
