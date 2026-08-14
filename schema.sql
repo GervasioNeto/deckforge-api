@@ -25,6 +25,27 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Toda vez que alguem se cadastra pela Supabase Auth (INSERT em
+-- auth.users), popula automaticamente o perfil correspondente aqui em
+-- public.users. "name" vem do metadata enviado no signUp
+-- (options.data.name); se nao vier, usa string vazia pra nao violar o
+-- NOT NULL.
+CREATE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
+BEGIN
+  INSERT INTO public.users (id, name, email)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', ''), NEW.email);
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+
 -- ------------------------------------------------------------
 -- CORE: cache de cartas (Scryfall / Pokémon TCG API)
 -- Estratégia cache-aside: só grava aqui quando alguém busca
