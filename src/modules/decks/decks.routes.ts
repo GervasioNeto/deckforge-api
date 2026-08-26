@@ -61,3 +61,15 @@ decksRoutes.post("/decks/:deckId/cards", requireAuth, async (req, res, next) => 
     next(error);
   }
 });
+
+decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
+  try {
+    const decks = await prisma.deck.findMany({
+      where: {userId: req.user!.id},
+      orderBy: {createdAt: "desc"}
+    });
+    return res.status(200).json(decks)
+  } catch (error) {
+    next(error);
+  }
+});
