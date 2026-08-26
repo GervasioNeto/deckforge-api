@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { prisma } from "../../config/prisma";
+import { addCardToDeck } from "../cards/cards.service";
 
 export const decksRoutes = Router();
 
@@ -39,5 +40,24 @@ decksRoutes.post("/decks", requireAuth, async (req, res) => {
     return res.status(500).json({
       error: "Internal error while creating deck.",
     });
+  }
+});
+
+decksRoutes.post("/decks/:deckId/cards", requireAuth, async (req, res, next) => {
+  try {
+    const { deckId } = req.params;
+    const { externalId } = req.body;
+
+    if (!externalId || typeof externalId !== "string") {
+      return res.status(400).json({
+        error: "The parameter 'externalId' is required.",
+      });
+    }
+
+    await addCardToDeck(deckId, externalId, req.user!.id);
+
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
   }
 });

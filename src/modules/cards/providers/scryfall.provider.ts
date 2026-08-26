@@ -13,6 +13,20 @@ export function mapScryfallCard(raw: any) {
   };
 }
 
+export async function getCardById(externalId: string) {
+  const response = await fetch(`${SCRYFALL_BASE_URL}/cards/${externalId}`, {
+    headers: { "User-Agent": "DeckForge/0.1 gervasiioneto@gmail.com", "Accept": "application/json" },
+  });
+
+  const data = (await response.json()) as any;
+
+  if (!response.ok) {
+    throw new Error(`Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`);
+  }
+
+  return data;
+}
+
 export async function searchCardByName(name: string) {
   const response = await fetch(
     `${SCRYFALL_BASE_URL}/cards/named?fuzzy=${encodeURIComponent(name)}`,
