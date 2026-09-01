@@ -73,3 +73,24 @@ decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
+  try {
+    const { deckId } = req.params;
+
+    const result = await prisma.deck.deleteMany({
+      where: {
+        id: deckId,
+        userId: req.user!.id,
+      },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({ error: "Deck not found." });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
