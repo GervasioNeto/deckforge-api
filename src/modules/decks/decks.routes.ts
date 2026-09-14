@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { prisma } from "../../config/prisma";
-import { addCardToDeck } from "../cards/cards.service";
+import { addCardToDeck, removeCardFromDeck } from "../cards/cards.service";
 
 export const decksRoutes = Router();
 
@@ -88,6 +88,18 @@ decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
     if (result.count === 0) {
       return res.status(404).json({ error: "Deck not found." });
     }
+
+    return res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+decksRoutes.delete("/decks/:deckId/cards/:cardId", requireAuth, async (req, res, next) => {
+  try {
+    const { deckId, cardId } = req.params;
+
+    await removeCardFromDeck(deckId, cardId, req.user!.id);
 
     return res.status(204).send();
   } catch (error) {
