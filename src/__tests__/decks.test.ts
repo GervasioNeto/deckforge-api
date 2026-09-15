@@ -36,6 +36,13 @@ vi.mock("../config/prisma", () => {
   };
 });
 
+// 3. ILUSÃO DO SERVICE DE CARTAS (A magia nova!)
+vi.mock("../modules/cards/cards.service", () => {
+  return {
+    addCardToDeck: vi.fn().mockResolvedValue(true),
+  };
+});
+
 import { app } from "../app";
 
 // A variavel dos mock
@@ -62,5 +69,18 @@ describe("Testes da Rota de Decks", () => {
     expect(response.body.name).toBe("Meu Deck de Fogo");
     expect(response.body.game).toBe("pokemon");
     expect(response.body.userId).toBe(MOCK_USER_ID);
+  });
+
+  // O NOVO TESTE: Adicionando a carta
+  it("deve adicionar uma carta ao deck com sucesso e retornar status 204", async () => {
+    const bodyCarta = {
+      externalId: "pikachu-vmax-001",
+    };
+
+    const response = await request(app)
+      .post("/api/decks/meu-deck-123/cards")
+      .send(bodyCarta);
+
+    expect(response.status).toBe(204);
   });
 });
