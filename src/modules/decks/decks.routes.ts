@@ -6,7 +6,7 @@ import { addCardToDeck } from "../cards/cards.service";
 export const decksRoutes = Router();
 
 decksRoutes.post("/decks", requireAuth, async (req, res) => {
-    console.log("=== REQUISICAO Criação de DECKS CHEGOU ===");
+  console.log("=== REQUISICAO Criação de DECKS CHEGOU ===");
   try {
     const { name, game, visibility } = req.body;
 
@@ -17,20 +17,26 @@ decksRoutes.post("/decks", requireAuth, async (req, res) => {
     }
 
     if (!["mtg", "pokemon"].includes(game)) {
-        return res.status(400).json({ error: "The field 'game' must be 'mtg' or 'pokemon'." });
+      return res
+        .status(400)
+        .json({ error: "The field 'game' must be 'mtg' or 'pokemon'." });
     }
 
     if (visibility && !["public", "private"].includes(visibility)) {
-    return res.status(400).json({ error: "The field 'visibility' must be 'public' or 'private'." });
+      return res
+        .status(400)
+        .json({
+          error: "The field 'visibility' must be 'public' or 'private'.",
+        });
     }
 
     const deck = await prisma.deck.create({
-        data: {
-            userId: req.user!.id,
-            name,
-            game,
-            ...(visibility ? { visibility } : {}),
-        },
+      data: {
+        userId: req.user!.id,
+        name,
+        game,
+        ...(visibility ? { visibility } : {}),
+      },
     });
 
     return res.status(201).json(deck);
@@ -43,32 +49,37 @@ decksRoutes.post("/decks", requireAuth, async (req, res) => {
   }
 });
 
-decksRoutes.post("/decks/:deckId/cards", requireAuth, async (req, res, next) => {
-  try {
-    const { deckId } = req.params;
-    const { externalId } = req.body;
+decksRoutes.post(
+  "/decks/:deckId/cards",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      // 💡 AQUI: Forçamos o TypeScript a entender que deckId é definitivamente uma string
+      const { deckId } = req.params as { deckId: string };
+      const { externalId } = req.body;
 
-    if (!externalId || typeof externalId !== "string") {
-      return res.status(400).json({
-        error: "The parameter 'externalId' is required.",
-      });
+      if (!externalId || typeof externalId !== "string") {
+        return res.status(400).json({
+          error: "The parameter 'externalId' is required.",
+        });
+      }
+
+      await addCardToDeck(deckId, externalId, req.user!.id);
+
+      return res.status(204).send();
+    } catch (error) {
+      next(error);
     }
-
-    await addCardToDeck(deckId, externalId, req.user!.id);
-
-    return res.status(204).send();
-  } catch (error) {
-    next(error);
-  }
-});
+  },
+);
 
 decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
   try {
     const decks = await prisma.deck.findMany({
-      where: {userId: req.user!.id},
-      orderBy: {createdAt: "desc"}
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: "desc" },
     });
-    return res.status(200).json(decks)
+    return res.status(200).json(decks);
   } catch (error) {
     next(error);
   }
@@ -76,7 +87,8 @@ decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
 
 decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
   try {
-    const { deckId } = req.params;
+    // 💡 AQUI: Fizemos a mesma coisa para o Prisma aceitar o delete tranquilamente
+    const { deckId } = req.params as { deckId: string };
 
     const result = await prisma.deck.deleteMany({
       where: {
