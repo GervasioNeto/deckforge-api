@@ -77,7 +77,7 @@ describe("Testes da Rota de Decks", () => {
     };
 
     const response = await request(app)
-      .post("/api/decks/meu-deck-123/cards")
+      .post("/api/decks/11111111-1111-1111-1111-111111111111/cards")
       .send(bodyCarta);
     expect(response.status).toBe(204);
   });
@@ -85,7 +85,7 @@ describe("Testes da Rota de Decks", () => {
   // Teste para sucesso em deletar
   it("deve deletar um deck com sucesso e retornar status 204", async () => {
     // Mandamos o DELETE para um ID qualquer
-    const response = await request(app).delete("/api/decks/deck-valido-123");
+    const response = await request(app).delete("/api/decks/22222222-2222-2222-2222-222222222222");
 
     // no mock acima, o count era 1, então deve chegar aqui
     expect(response.status).toBe(204);
@@ -96,9 +96,10 @@ describe("Testes da Rota de Decks", () => {
     // Forçando o MockPrisma a retornar com count 0
     (prisma.deck.deleteMany as any).mockResolvedValueOnce({ count: 0 });
 
-    const response = await request(app).delete("/api/decks/deck-fantasma-404");
+    const response = await request(app).delete("/api/decks/33333333-3333-3333-3333-333333333333");
 
     expect(response.status).toBe(404);
-    expect(response.body.error).toBe("Deck not found.");
+    expect(response.body.error).toBe("DECK_NOT_FOUND");
+    expect(response.body.message).toBe("Deck not found.");
   });
 });
