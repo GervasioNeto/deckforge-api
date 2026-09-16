@@ -14,7 +14,10 @@ declare global {
   }
 }
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+// `P` generico: sem isso o TS fixa os params da rota em ParamsDictionary
+// (`string | string[]`) e `req.params.deckId` deixa de ser `string` nas rotas
+// que usam esse middleware.
+export async function requireAuth<P>(req: Request<P>, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader?.startsWith("Bearer ")) {
