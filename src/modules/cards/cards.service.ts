@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma";
 import { HttpError } from "../../middlewares/error-handler";
+import { isValidUuid } from "../../utils/validators";
 import { getCardById, mapScryfallCard, searchCardByName } from "./providers/scryfall.provider";
 
 // So trata MTG por enquanto - quando entrar Pokemon, isso precisa
@@ -56,16 +57,14 @@ export async function getOrCreateCardByExternalId(externalId: string, game: stri
 // na API externa. O `game` vem do deck: garante que a carta pertence ao mesmo
 // jogo do deck que esta sendo modificado.
 export async function getCardByInternalId(cardId: string, game: string) {
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cardId);
-
-  if (!isUuid) {
-    throw new HttpError(400, `'${cardId}' não é um ID de carta válido.`);
+  if (!isValidUuid(cardId)) {
+    throw new HttpError(400, `'${cardId}' não é um ID de carta válido.`, "INVALID_CARD_ID");
   }
 
   const card = await prisma.card.findUnique({ where: { id: cardId } });
 
   if (!card || card.game !== game) {
-    throw new HttpError(404, `Carta com ID ${cardId} não encontrada.`);
+    throw new HttpError(404, `Carta com ID ${cardId} não encontrada.`, "CARD_NOT_FOUND");
   }
 
   return { ...mapScryfallCard(card.rawData), id: card.id };
@@ -74,12 +73,10 @@ export async function getCardByInternalId(cardId: string, game: string) {
 export async function addCardToDeck(deckId: string, cardExternalId: string, userId: string) {
   const deck = await prisma.deck.findUnique({ where: { id: deckId } });
 
-  if (!deck) {
-    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`);
-  }
-
-  if (deck.userId !== userId) {
-    throw new HttpError(403, `Usuário ${userId} não tem permissão para modificar o deck ${deckId}.`);
+  // Não distingue "deck inexistente" de "deck de outro usuário": ambos
+  // retornam 404, pra não revelar a outro usuário que um deck existe.
+  if (!deck || deck.userId !== userId) {
+    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`, "DECK_NOT_FOUND");
   }
 
   const card = await getOrCreateCardByExternalId(cardExternalId, deck.game);
@@ -96,12 +93,10 @@ export async function addCardToDeck(deckId: string, cardExternalId: string, user
 export async function removeCardFromDeck(deckId: string, cardId: string, userId: string) {
   const deck = await prisma.deck.findUnique({ where: { id: deckId } });
 
-  if (!deck) {
-    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`);
-  }
-
-  if (deck.userId !== userId) {
-    throw new HttpError(403, `Usuário ${userId} não tem permissão para modificar o deck ${deckId}.`);
+  // Não distingue "deck inexistente" de "deck de outro usuário": ambos
+  // retornam 404, pra não revelar a outro usuário que um deck existe.
+  if (!deck || deck.userId !== userId) {
+    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`, "DECK_NOT_FOUND");
   }
 
   const card = await getCardByInternalId(cardId, deck.game);
@@ -111,7 +106,7 @@ export async function removeCardFromDeck(deckId: string, cardId: string, userId:
   });
 
   if (!deckCard) {
-    throw new HttpError(404, `Carta ${card.name} não está no deck ${deckId}.`);
+    throw new HttpError(404, `Carta ${card.name} não está no deck ${deckId}.`, "CARD_NOT_IN_DECK");
   }
 
   if (deckCard.quantity > 1) {

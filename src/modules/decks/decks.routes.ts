@@ -1,27 +1,27 @@
 import { Router } from "express";
 import { requireAuth } from "../../middlewares/auth";
 import { prisma } from "../../config/prisma";
+import { HttpError } from "../../middlewares/error-handler";
+import { isValidUuid } from "../../utils/validators";
 import { addCardToDeck, removeCardFromDeck } from "../cards/cards.service";
 
 export const decksRoutes = Router();
 
-decksRoutes.post("/decks", requireAuth, async (req, res) => {
+decksRoutes.post("/decks", requireAuth, async (req, res, next) => {
     console.log("=== REQUISICAO Criação de DECKS CHEGOU ===");
   try {
     const { name, game, visibility } = req.body;
 
     if (!name || typeof name !== "string") {
-      return res.status(400).json({
-        error: "The parameter 'name' is required.",
-      });
+      throw new HttpError(400, "The parameter 'name' is required.", "VALIDATION_ERROR");
     }
 
     if (!["mtg", "pokemon"].includes(game)) {
-        return res.status(400).json({ error: "The field 'game' must be 'mtg' or 'pokemon'." });
+      throw new HttpError(400, "The field 'game' must be 'mtg' or 'pokemon'.", "VALIDATION_ERROR");
     }
 
     if (visibility && !["public", "private"].includes(visibility)) {
-    return res.status(400).json({ error: "The field 'visibility' must be 'public' or 'private'." });
+      throw new HttpError(400, "The field 'visibility' must be 'public' or 'private'.", "VALIDATION_ERROR");
     }
 
     const deck = await prisma.deck.create({
@@ -36,10 +36,7 @@ decksRoutes.post("/decks", requireAuth, async (req, res) => {
     return res.status(201).json(deck);
   } catch (error) {
     console.error("Error creating deck:", error);
-
-    return res.status(500).json({
-      error: "Internal error while creating deck.",
-    });
+    next(error);
   }
 });
 
@@ -48,10 +45,12 @@ decksRoutes.post("/decks/:deckId/cards", requireAuth, async (req, res, next) => 
     const { deckId } = req.params;
     const { externalId } = req.body;
 
+    if (!isValidUuid(deckId)) {
+      throw new HttpError(400, `'${deckId}' não é um ID de deck válido.`, "INVALID_DECK_ID");
+    }
+
     if (!externalId || typeof externalId !== "string") {
-      return res.status(400).json({
-        error: "The parameter 'externalId' is required.",
-      });
+      throw new HttpError(400, "The parameter 'externalId' is required.", "VALIDATION_ERROR");
     }
 
     await addCardToDeck(deckId, externalId, req.user!.id);
@@ -78,6 +77,10 @@ decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
   try {
     const { deckId } = req.params;
 
+    if (!isValidUuid(deckId)) {
+      throw new HttpError(400, `'${deckId}' não é um ID de deck válido.`, "INVALID_DECK_ID");
+    }
+
     const result = await prisma.deck.deleteMany({
       where: {
         id: deckId,
@@ -86,7 +89,7 @@ decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
     });
 
     if (result.count === 0) {
-      return res.status(404).json({ error: "Deck not found." });
+      throw new HttpError(404, "Deck not found.", "DECK_NOT_FOUND");
     }
 
     return res.status(204).send();
@@ -98,6 +101,10 @@ decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
 decksRoutes.delete("/decks/:deckId/cards/:cardId", requireAuth, async (req, res, next) => {
   try {
     const { deckId, cardId } = req.params;
+
+    if (!isValidUuid(deckId)) {
+      throw new HttpError(400, `'${deckId}' não é um ID de deck válido.`, "INVALID_DECK_ID");
+    }
 
     await removeCardFromDeck(deckId, cardId, req.user!.id);
 
