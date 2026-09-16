@@ -1,3 +1,5 @@
+import { HttpError } from "../../../middlewares/error-handler";
+
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 
 export function mapScryfallCard(raw: any) {
@@ -21,7 +23,10 @@ export async function getCardById(externalId: string) {
   const data = (await response.json()) as any;
 
   if (!response.ok) {
-    throw new Error(`Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`);
+    if (response.status === 404) {
+      throw new HttpError(404, `Carta com ID '${externalId}' não encontrada na Scryfall.`, "CARD_NOT_FOUND");
+    }
+    throw new HttpError(502, `Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`, "UPSTREAM_ERROR");
   }
 
   return data;
@@ -36,7 +41,10 @@ export async function searchCardByName(name: string) {
 const data = (await response.json()) as any;
 
   if (!response.ok) {
-    throw new Error(`Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`);
+    if (response.status === 404) {
+      throw new HttpError(404, `Carta '${name}' não encontrada.`, "CARD_NOT_FOUND");
+    }
+    throw new HttpError(502, `Scryfall respondeu ${response.status}: ${data.details ?? "erro desconhecido"}`, "UPSTREAM_ERROR");
   }
 
   return data;
