@@ -73,6 +73,61 @@ decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
   }
 });
 
+decksRoutes.get("/decks/:deckId", requireAuth, async (req, res, next) => {
+  try {
+    const { deckId } = req.params;
+
+    // valida se o id da url veio de um uuid valido
+    if (!isValidUuid(deckId)) {
+      throw new HttpError(
+        400,
+        `'${deckId}' não é um ID de deck válido.`,
+        "INVALID_DECK_ID",
+      );
+    }
+
+    // faz a busca do deck do user que ta on, com as cards
+    const deck = await prisma.deck.findFirst({
+      where: {
+        id: deckId,
+        userId: req.user!.id, // o user so pode ver o proprio deck
+      },
+      include: {
+        deckCards: {
+          include: {
+            card: true, // traz todos aqueles dados da tabela card, pra carta
+          },
+        },
+      },
+    });
+
+    // se nao achar, vem ai um 404
+    if (!deck) {
+      throw new HttpError(404, "Deck not found.", "DECK_NOT_FOUND");
+    }
+
+    // formatando os dados pra virem filé
+    const formattedDeck = {
+      id: deck.id,
+      name: deck.name,
+      game: deck.game,
+      visibility: deck.visibility,
+      shareToken: deck.shareToken,
+      createdAt: deck.createdAt,
+      updatedAt: deck.updatedAt,
+      // pega as cartas e poe todas em uma lista pra ficar mais legivel
+      cards: deck.deckCards.map((dc) => ({
+        ...dc.card,
+        quantity: dc.quantity,
+      })),
+    };
+
+    return res.status(200).json(formattedDeck);
+  } catch (error) {
+    next(error);
+  }
+});
+
 decksRoutes.delete("/decks/:deckId", requireAuth, async (req, res, next) => {
   try {
     const { deckId } = req.params;
