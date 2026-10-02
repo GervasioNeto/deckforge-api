@@ -12,7 +12,8 @@
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:studio": "prisma studio",
-    "test": "vitest"
+    "test": "vitest",
+    "smoke-test": "tsx scripts/smoke-test.ts"
   },
   "license": "ISC",
   "dependencies": {

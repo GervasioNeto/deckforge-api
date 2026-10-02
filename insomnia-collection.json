@@ -1,0 +1,277 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-09-16T20:00:00.000Z",
+  "__export_source": "deckforge-api.manual-export",
+  "resources": [
+    {
+      "_id": "wrk_deckforge",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "DeckForge API",
+      "description": "Coleção de testes das rotas da DeckForge API",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "parentId": "wrk_deckforge",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3333/api",
+        "token": "",
+        "deckId": "",
+        "cardId": "",
+        "externalId": "bd8fa327-dd41-4737-8f19-2cf5eb1f7cdd",
+        "supabase_url": "https://kwaojumzgdjsxjdwimil.supabase.co",
+        "supabase_anon_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3YW9qdW16Z2Rqc3hqZHdpbWlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NTIzNTQsImV4cCI6MjEwMjAyODM1NH0.lcUgQYZeHkYhnTeF2pT20tzzhjKqqOQbPT2MvcsJI4Y",
+        "test_email": "teste.deckforge@yopmail.com",
+        "test_password": "Teste@123"
+      },
+      "metaSortKey": 1
+    },
+
+    { "_id": "fld_auth", "_type": "request_group", "parentId": "wrk_deckforge", "name": "0. Autenticação (Supabase)", "metaSortKey": 1 },
+    {
+      "_id": "req_login",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login (gerar token)",
+      "description": "Gera um access_token do Supabase para usar nas rotas protegidas. Preencha supabase_url e supabase_anon_key no Environment (valores do seu .env). Copie o 'access_token' da resposta para a variável 'token' do Environment.",
+      "method": "POST",
+      "url": "{{ _.supabase_url }}/auth/v1/token?grant_type=password",
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" },
+        { "name": "apikey", "value": "{{ _.supabase_anon_key }}" }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.test_email }}\",\n  \"password\": \"{{ _.test_password }}\"\n}"
+      },
+      "metaSortKey": 1
+    },
+
+    { "_id": "fld_health", "_type": "request_group", "parentId": "wrk_deckforge", "name": "1. Health", "metaSortKey": 2 },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_health",
+      "name": "GET /health",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health",
+      "headers": [],
+      "metaSortKey": 1
+    },
+
+    { "_id": "fld_cards", "_type": "request_group", "parentId": "wrk_deckforge", "name": "2. Cards (público)", "metaSortKey": 3 },
+    {
+      "_id": "req_cards_ok",
+      "_type": "request",
+      "parentId": "fld_cards",
+      "name": "GET /cards?name=... (sucesso)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cards",
+      "parameters": [{ "name": "name", "value": "Black Lotus" }],
+      "headers": [],
+      "metaSortKey": 1
+    },
+    {
+      "_id": "req_cards_missing_name",
+      "_type": "request",
+      "parentId": "fld_cards",
+      "name": "GET /cards sem name (esperado 400)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cards",
+      "headers": [],
+      "metaSortKey": 2
+    },
+
+    { "_id": "fld_me", "_type": "request_group", "parentId": "wrk_deckforge", "name": "3. Usuário", "metaSortKey": 4 },
+    {
+      "_id": "req_me_ok",
+      "_type": "request",
+      "parentId": "fld_me",
+      "name": "GET /me (sucesso)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/me",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 1
+    },
+    {
+      "_id": "req_me_401",
+      "_type": "request",
+      "parentId": "fld_me",
+      "name": "GET /me sem token (esperado 401)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/me",
+      "headers": [],
+      "metaSortKey": 2
+    },
+
+    { "_id": "fld_decks", "_type": "request_group", "parentId": "wrk_deckforge", "name": "4. Decks", "metaSortKey": 5 },
+    {
+      "_id": "req_deck_create",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks (sucesso)",
+      "description": "Copie o 'id' da resposta para a variável 'deckId' do Environment.",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Deck de Teste\",\n  \"game\": \"mtg\",\n  \"visibility\": \"public\"\n}"
+      },
+      "metaSortKey": 1
+    },
+    {
+      "_id": "req_deck_create_bad_game",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks com game inválido (esperado 400)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Deck Invalido\",\n  \"game\": \"yugioh\"\n}"
+      },
+      "metaSortKey": 2
+    },
+    {
+      "_id": "req_deck_create_no_name",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks sem name (esperado 400)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"game\": \"mtg\"\n}"
+      },
+      "metaSortKey": 3
+    },
+    {
+      "_id": "req_deck_create_401",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks sem token (esperado 401)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Deck de Teste\",\n  \"game\": \"mtg\"\n}"
+      },
+      "metaSortKey": 4
+    },
+    {
+      "_id": "req_deck_list",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "GET /decks (lista os decks do usuário)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/decks",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 5
+    },
+    {
+      "_id": "req_deck_add_card",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards (adicionar carta)",
+      "description": "Use um deckId válido (variável 'deckId') e um externalId de carta real (obtido em GET /cards).",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\"\n}"
+      },
+      "metaSortKey": 6
+    },
+    {
+      "_id": "req_deck_add_card_invalid_deck",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards com deckId inválido (esperado 400)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/nao-uuid/cards",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\"\n}"
+      },
+      "metaSortKey": 7
+    },
+    {
+      "_id": "req_deck_add_card_deck_not_found",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards em deck inexistente (esperado 404)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/11111111-1111-1111-1111-111111111111/cards",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\"\n}"
+      },
+      "metaSortKey": 8
+    },
+    {
+      "_id": "req_deck_remove_card",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "DELETE /decks/{deckId}/cards/{cardId} (remover carta)",
+      "description": "ATENÇÃO: cardId aqui é o ID INTERNO do banco (tabela cards), não o externalId da Scryfall retornado por GET /cards. Não há hoje uma rota que devolva esse id interno ao cliente — é um gap conhecido da API. Peça esse id ao backend (ex: Prisma Studio) durante o teste.",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards/{{ _.cardId }}",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 9
+    },
+    {
+      "_id": "req_deck_delete",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "DELETE /decks/{deckId} (sucesso)",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 10
+    },
+    {
+      "_id": "req_deck_delete_404",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "DELETE /decks/{deckId} inexistente (esperado 404)",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/decks/22222222-2222-2222-2222-222222222222",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 11
+    },
+
+    { "_id": "fld_notfound", "_type": "request_group", "parentId": "wrk_deckforge", "name": "5. Diversos", "metaSortKey": 6 },
+    {
+      "_id": "req_route_404",
+      "_type": "request",
+      "parentId": "fld_notfound",
+      "name": "GET rota inexistente (esperado 404)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/rota-que-nao-existe",
+      "headers": [],
+      "metaSortKey": 1
+    }
+  ]
+}
