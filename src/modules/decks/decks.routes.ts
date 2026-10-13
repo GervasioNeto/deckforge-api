@@ -73,6 +73,36 @@ decksRoutes.get("/decks", requireAuth, async (req, res, next) => {
   }
 });
 
+decksRoutes.get("/decks/public", async (req, res, next) => {
+  try {
+    const { game } = req.query;
+
+    if (game && (typeof game !== "string" || !["mtg", "pokemon"].includes(game))) {
+      throw new HttpError(400, "The field 'game' must be 'mtg' or 'pokemon'.", "VALIDATION_ERROR");
+    }
+
+    const decks = await prisma.deck.findMany({
+      where: {
+        visibility: "public",
+        ...(game ? { game } : {}),
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return res.status(200).json(decks);
+  } catch (error) {
+    next(error);
+  }
+});
+
 decksRoutes.get("/decks/:deckId", requireAuth, async (req, res, next) => {
   try {
     const { deckId } = req.params;
