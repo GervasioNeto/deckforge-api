@@ -160,4 +160,72 @@ describe("Testes da Rota de Decks", () => {
     expect(response.status).toBe(400);
     expect(response.body.error).toBe("INVALID_DECK_ID");
   });
+
+  // --- TESTES DO GET /decks/public ---
+
+  it("deve listar decks públicos com sucesso sem necessidade de autenticação", async () => {
+    const mockDecksPublicos = [
+      {
+        id: "public-deck-1",
+        name: "Deck Público de Teste",
+        game: "mtg",
+        visibility: "public",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        user: {
+          id: "autor-uuid-1",
+          name: "Jogador 1",
+        },
+      },
+    ];
+
+    (prisma.deck.findMany as any).mockResolvedValueOnce(mockDecksPublicos);
+
+    const response = await request(app).get("/api/decks/public");
+
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body)).toBe(true);
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0].name).toBe("Deck Público de Teste");
+    expect(response.body[0].user).toEqual({
+      id: "autor-uuid-1",
+      name: "Jogador 1",
+    });
+
+    expect(prisma.deck.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { visibility: "public" },
+        include: {
+          user: {
+            select: { id: true, name: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    );
+  });
+
+  it("deve filtrar decks públicos por game com sucesso", async () => {
+    (prisma.deck.findMany as any).mockResolvedValueOnce([]);
+
+    const response = await request(app).get("/api/decks/public?game=pokemon");
+
+    expect(response.status).toBe(200);
+    expect(prisma.deck.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          visibility: "public",
+          game: "pokemon",
+        },
+      }),
+    );
+  });
+
+  it("deve retornar status 400 se o filtro de game for inválido", async () => {
+    const response = await request(app).get("/api/decks/public?game=yugioh");
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("VALIDATION_ERROR");
+  });
 });
+
