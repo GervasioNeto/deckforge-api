@@ -182,6 +182,24 @@
       "metaSortKey": 5
     },
     {
+      "_id": "req_deck_list_public",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "GET /decks/public (listar decks públicos)",
+      "description": "Lista todos os decks com visibilidade pública de todos os usuários. Não requer autenticação. Suporta filtro opcional por query param (ex: game=pokemon ou game=mtg).",
+      "method": "GET",
+      "url": "{{ _.base_url }}/decks/public",
+      "parameters": [
+        {
+          "name": "game",
+          "value": "pokemon",
+          "disabled": true
+        }
+      ],
+      "headers": [],
+      "metaSortKey": 5.5
+    },
+    {
       "_id": "req_deck_add_card",
       "_type": "request",
       "parentId": "fld_decks",
