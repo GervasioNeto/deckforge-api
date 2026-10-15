@@ -6,15 +6,14 @@ import { prisma } from "../config/prisma";
 
 // 1. Mock de Autenticação
 vi.mock("../middlewares/auth", () => {
-  return {
-    requireAuth: (req: any, res: any, next: any) => {
-      req.user = {
-        id: "123e4567-e89b-12d3-a456-426614174000",
-        email: "teste@deckforge.com",
-      };
-      next();
-    },
+  const loggedIn = (req: any, res: any, next: any) => {
+    req.user = {
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      email: "teste@deckforge.com",
+    };
+    next();
   };
+  return { requireAuth: loggedIn, optionalAuth: loggedIn };
 });
 
 // 2. Mock do BD
@@ -53,7 +52,12 @@ vi.mock("../config/prisma", () => {
           updatedAt: new Date(),
         }),
         deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({}),
       },
+      deckCard: {
+        upsert: vi.fn().mockResolvedValue({}),
+      },
+      $transaction: vi.fn().mockResolvedValue([]),
     },
   };
 });
@@ -61,7 +65,9 @@ vi.mock("../config/prisma", () => {
 // 3. Mock do Service de Cartas
 vi.mock("../modules/cards/cards.service", () => {
   return {
-    addCardToDeck: vi.fn().mockResolvedValue(true),
+    findOrFetchCard: vi.fn().mockResolvedValue({ id: "card-123", name: "Charizard" }),
+    resolveCardsByNames: vi.fn(),
+    cardNameKey: (name: string) => name.trim().toLowerCase(),
   };
 });
 
@@ -90,7 +96,7 @@ describe("Testes da Rota de Decks", () => {
     expect(response.body.userId).toBe(MOCK_USER_ID);
   });
 
-  it("deve adicionar uma carta ao deck com sucesso e retornar status 204", async () => {
+  it("deve adicionar uma carta ao deck com sucesso e devolver o deck atualizado", async () => {
     const bodyCarta = {
       externalId: "pikachu-vmax-001",
     };
@@ -98,7 +104,8 @@ describe("Testes da Rota de Decks", () => {
     const response = await request(app)
       .post("/api/decks/11111111-1111-1111-1111-111111111111/cards")
       .send(bodyCarta);
-    expect(response.status).toBe(204);
+    expect(response.status).toBe(200);
+    expect(response.body.cards[0].name).toBe("Charizard");
   });
 
   // Teste para sucesso em deletar

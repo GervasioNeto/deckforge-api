@@ -36,37 +36,48 @@ model Card {
   rawData    Json     @map("raw_data")
   fetchedAt  DateTime @default(now()) @map("fetched_at") @db.Timestamptz(6)
 
-  deckCards DeckCard[]
+  deckCards  DeckCard[]
+  coverOf    Deck[]     @relation("DeckCover")
 
   @@unique([externalId, game])
   @@map("cards")
 }
 
 model Deck {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  name       String   @db.VarChar(120)
-  game       String   @db.VarChar(20)
-  visibility String   @default("private") @db.VarChar(10)
-  shareToken String?  @default(dbgenerated("gen_random_uuid()")) @unique @map("share_token") @db.Uuid
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  name        String   @db.VarChar(120)
+  game        String   @db.VarChar(20)
+  // null = sem formato (casual). Os valores validos dependem do jogo e sao
+  // validados na aplicacao (ver modules/decks/decks.constants.ts).
+  format      String?  @db.VarChar(20)
+  description String?
+  visibility  String   @default("private") @db.VarChar(10)
+  // Carta escolhida pelo dono como capa; null usa a carta com mais copias.
+  coverCardId String?  @map("cover_card_id") @db.Uuid
+  shareToken  String?  @default(dbgenerated("gen_random_uuid()")) @unique @map("share_token") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  coverCard Card?      @relation("DeckCover", fields: [coverCardId], references: [id], onDelete: SetNull)
   deckCards DeckCard[]
 
   @@map("decks")
 }
 
-// Tabela de juncao: quantas copias de cada carta em cada deck.
+// Tabela de juncao: quantas copias de cada carta em cada board do deck
+// (main, sideboard, maybeboard ou comandante). A mesma carta pode estar em
+// mais de um board ao mesmo tempo.
 model DeckCard {
   deckId   String @map("deck_id") @db.Uuid
   cardId   String @map("card_id") @db.Uuid
+  board    String @default("main") @db.VarChar(10)
   quantity Int    @default(1) @db.SmallInt
 
   deck Deck @relation(fields: [deckId], references: [id], onDelete: Cascade)
   card Card @relation(fields: [cardId], references: [id], onDelete: Restrict)
 
-  @@id([deckId, cardId])
+  @@id([deckId, cardId, board])
   @@map("deck_cards")
 }

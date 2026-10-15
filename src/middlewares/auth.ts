@@ -40,3 +40,15 @@ export async function requireAuth<P>(req: Request<P>, res: Response, next: NextF
   req.user = { id: data.user.id, email: data.user.email ?? "" };
   next();
 }
+
+// Pra rotas que funcionam com ou sem login (ex: ver um deck publico): sem
+// header segue anonimo; com header, valida igual ao requireAuth. Um token
+// invalido continua dando 401 em vez de virar anonimo, senao o front acharia
+// que a sessao ainda vale.
+export async function optionalAuth<P>(req: Request<P>, res: Response, next: NextFunction): Promise<void> {
+  if (!req.headers.authorization) {
+    next();
+    return;
+  }
+  return requireAuth(req, res, next);
+}
