@@ -40,3 +40,27 @@ Retorna o objeto detalhado da carta encontrada no serviço externo.
 | ------ | ----------------------------------------------------------- |
 | 400    | O parâmetro 'name' é obrigatório ou possui formato inválido |
 | 500    | Erro interno ao buscar carta no serviço externo             |
+
+---
+
+### Sugerir nomes de cartas (autocomplete)
+
+`GET /cards/autocomplete`
+
+Até 20 nomes de cartas de Magic que batem com o texto digitado (via Scryfall). Não grava nada no cache.
+
+**Query params**
+
+| Nome | Tipo   | Obrigatório | Descrição                                                   |
+| ---- | ------ | ----------- | ----------------------------------------------------------- |
+| q    | string | sim         | Texto digitado. Com menos de 2 caracteres, a lista vem vazia |
+
+**Exemplo de Requisição**
+
+`GET /cards/autocomplete?q=lightning`
+
+**Resposta (200 OK)**
+
+```json
+{ "names": ["Lightning Bolt", "Lightning Helix", "Lightning Greaves"] }
+```

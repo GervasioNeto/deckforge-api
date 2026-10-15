@@ -73,7 +73,10 @@ CREATE TABLE decks (
   user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name         VARCHAR(120) NOT NULL,
   game         VARCHAR(20) NOT NULL CHECK (game IN ('mtg', 'pokemon')),
+  format       VARCHAR(20),                     -- null = sem formato (casual); valores validados na aplicação, por jogo
+  description  TEXT CHECK (char_length(description) <= 2000),
   visibility   VARCHAR(10) NOT NULL DEFAULT 'private' CHECK (visibility IN ('public', 'private')),
+  cover_card_id UUID REFERENCES cards(id) ON DELETE SET NULL,  -- capa escolhida; null = carta com mais cópias
   share_token  UUID DEFAULT gen_random_uuid(),  -- usado no link de compartilhamento
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -83,12 +86,16 @@ CREATE UNIQUE INDEX idx_decks_share_token ON decks(share_token);
 
 -- ------------------------------------------------------------
 -- CORE: cartas dentro de um deck (tabela de junção)
+-- Cada carta fica num "board": main (deck principal), side (sideboard),
+-- maybe (maybeboard, cartas em teste que não contam no deck) ou
+-- commander (zona de comandante). A mesma carta pode estar em mais de um.
 -- ------------------------------------------------------------
 CREATE TABLE deck_cards (
   deck_id  UUID NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
   card_id  UUID NOT NULL REFERENCES cards(id) ON DELETE RESTRICT,
+  board    VARCHAR(10) NOT NULL DEFAULT 'main' CHECK (board IN ('main', 'side', 'maybe', 'commander')),
   quantity SMALLINT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-  PRIMARY KEY (deck_id, card_id)
+  PRIMARY KEY (deck_id, card_id, board)
 );
 
 -- ------------------------------------------------------------

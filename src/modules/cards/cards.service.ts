@@ -1,124 +1,161 @@
+import type { Card } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { HttpError } from "../../middlewares/error-handler";
-import { isValidUuid } from "../../utils/validators";
-import { getCardById, mapScryfallCard, searchCardByName } from "./providers/scryfall.provider";
+import {
+  autocompleteCardNames,
+  getCardById,
+  getCardsByNames,
+  mapScryfallCard,
+  scryfallImageUrl,
+  searchCardByName,
+  waitForScryfall,
+} from "./providers/scryfall.provider";
 
-// So trata MTG por enquanto - quando entrar Pokemon, isso precisa
-// receber um `game` e escolher o provider/mapper certo.
-export async function getCardByName(name: string) {
+// So trata MTG por enquanto - quando entrar Pokemon, cada funcao daqui precisa
+// receber o `game` e escolher o provider/mapper certo.
+const MTG = "mtg";
 
-    const normalizedName = name.trim().replace(/\+/g, " ");
-    const cached = await prisma.card.findFirst({
-        where: {
-        name: { equals: normalizedName, mode: "insensitive" },
-        game: "mtg",
-        },
-    });
+// Quantos nomes do import ainda tentam a busca fuzzy (uma requisicao cada)
+// depois que o lote exato falhou - o suficiente pra erros de digitacao, sem
+// deixar um import todo errado prender a requisicao por muito tempo.
+const FUZZY_FALLBACK_LIMIT = 15;
+
+// Chave pra comparar nomes de carta sem diferenciar maiusculas.
+export const cardNameKey = (name: string) => name.trim().toLowerCase();
+
+function assertSupportedGame(game: string): void {
+  if (game !== MTG) {
+    throw new HttpError(400, `Cartas de '${game}' ainda não são suportadas.`, "GAME_NOT_SUPPORTED");
+  }
+}
+
+function cardData(raw: any, game: string) {
+  return {
+    externalId: raw.id,
+    game,
+    name: raw.name,
+    imageUrl: scryfallImageUrl(raw) ?? "",
+    text: raw.oracle_text ?? null,
+    rawData: raw,
+  };
+}
+
+// Grava (ou reaproveita, se ja existir) a carta crua da Scryfall no cache.
+export async function cacheScryfallCard(raw: any, game = MTG): Promise<Card> {
+  return prisma.card.upsert({
+    where: { externalId_game: { externalId: raw.id, game } },
+    create: cardData(raw, game),
+    update: {},
+  });
+}
+
+// O mesmo, pra varias cartas em duas queries (em vez de uma por carta).
+async function cacheScryfallCards(raws: any[], game = MTG): Promise<Card[]> {
+  if (raws.length === 0) {
+    return [];
+  }
+  await prisma.card.createMany({ data: raws.map((raw) => cardData(raw, game)), skipDuplicates: true });
+  return prisma.card.findMany({ where: { game, externalId: { in: raws.map((raw) => raw.id) } } });
+}
+
+// Uma carta de duas faces casa pelo nome inteiro ("Fable of the Mirror-Breaker
+// // Reflection of Kiki-Jiki") e pelo de cada face.
+function cardAliases(card: Card): string[] {
+  const faces = card.name.split(" // ");
+  return faces.length > 1 ? [card.name, ...faces] : [card.name];
+}
+
+async function findOrFetchCardByName(name: string): Promise<Card> {
+  const normalizedName = name.trim().replace(/\+/g, " ");
+  const cached = await prisma.card.findFirst({
+    where: {
+      name: { equals: normalizedName, mode: "insensitive" },
+      game: MTG,
+    },
+  });
 
   if (cached) {
     console.log(`Carta ${normalizedName} encontrada no cache.`);
-    return mapScryfallCard(cached.rawData);
+    return cached;
   }
 
-  const raw = await searchCardByName(name);
   console.log(`Carta ${normalizedName} não encontrada no cache. Buscando na Scryfall...`);
-
-await prisma.card.upsert({
-  where: { externalId_game: { externalId: raw.id, game: "mtg" } },
-  create: { externalId: raw.id, game: "mtg", name: raw.name, imageUrl: raw.image_uris?.normal ?? "", text: raw.oracle_text ?? null, rawData: raw },
-  update: {},
-});
-
-  return mapScryfallCard(raw);
+  return cacheScryfallCard(await searchCardByName(normalizedName));
 }
 
-export async function getOrCreateCardByExternalId(externalId: string, game: string) {
-
-    const cached = await prisma.card.findUnique({ where: { externalId_game: { externalId, game } } });
+async function findOrFetchCardByExternalId(externalId: string): Promise<Card> {
+  const cached = await prisma.card.findUnique({ where: { externalId_game: { externalId, game: MTG } } });
 
   if (cached) {
     console.log(`Carta de ID ${externalId} encontrada no cache.`);
-    return { ...mapScryfallCard(cached.rawData), id: cached.id };
+    return cached;
   }
 
-  const raw = await getCardById(externalId);
   console.log(`Carta de ID ${externalId} não encontrada no cache. Buscando na Scryfall...`);
-
-  const saved = await prisma.card.upsert({
-    where: { externalId_game: { externalId: raw.id, game } },
-    create: { externalId: raw.id, game, name: raw.name, imageUrl: raw.image_uris?.normal ?? "", text: raw.oracle_text ?? null, rawData: raw },
-    update: {},
-  });
-
-  return { ...mapScryfallCard(raw), id: saved.id };
+  return cacheScryfallCard(await getCardById(externalId));
 }
 
-// Busca a carta pelo nosso id interno (uuid), so no banco local - nunca bate
-// na API externa. O `game` vem do deck: garante que a carta pertence ao mesmo
-// jogo do deck que esta sendo modificado.
-export async function getCardByInternalId(cardId: string, game: string) {
-  if (!isValidUuid(cardId)) {
-    throw new HttpError(400, `'${cardId}' não é um ID de carta válido.`, "INVALID_CARD_ID");
-  }
-
-  const card = await prisma.card.findUnique({ where: { id: cardId } });
-
-  if (!card || card.game !== game) {
-    throw new HttpError(404, `Carta com ID ${cardId} não encontrada.`, "CARD_NOT_FOUND");
-  }
-
-  return { ...mapScryfallCard(card.rawData), id: card.id };
+export async function getCardByName(name: string) {
+  const card = await findOrFetchCardByName(name);
+  return mapScryfallCard(card.rawData);
 }
 
-export async function addCardToDeck(deckId: string, cardExternalId: string, userId: string) {
-  const deck = await prisma.deck.findUnique({ where: { id: deckId } });
-
-  // Não distingue "deck inexistente" de "deck de outro usuário": ambos
-  // retornam 404, pra não revelar a outro usuário que um deck existe.
-  if (!deck || deck.userId !== userId) {
-    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`, "DECK_NOT_FOUND");
-  }
-
-  const card = await getOrCreateCardByExternalId(cardExternalId, deck.game);
-
-  await prisma.deckCard.upsert({
-    where: { deckId_cardId: { deckId, cardId: card.id } },
-    create: { deckId, cardId: card.id },
-    update: { quantity: { increment: 1 } },
-  });
-
-  console.log(`Carta ${card.name} adicionada ao deck ${deckId}.`);
+export async function getCardNameSuggestions(query: string): Promise<string[]> {
+  return autocompleteCardNames(query);
 }
 
-export async function removeCardFromDeck(deckId: string, cardId: string, userId: string) {
-  const deck = await prisma.deck.findUnique({ where: { id: deckId } });
+// A carta que vai entrar num deck, pelo id externo (resultado de uma busca)
+// ou direto pelo nome (o que o usuario digitou/escolheu no autocomplete).
+export async function findOrFetchCard(ref: { externalId?: string; name?: string }, game: string): Promise<Card> {
+  assertSupportedGame(game);
+  return ref.externalId ? findOrFetchCardByExternalId(ref.externalId) : findOrFetchCardByName(ref.name!);
+}
 
-  // Não distingue "deck inexistente" de "deck de outro usuário": ambos
-  // retornam 404, pra não revelar a outro usuário que um deck existe.
-  if (!deck || deck.userId !== userId) {
-    throw new HttpError(404, `Deck com ID ${deckId} não encontrado.`, "DECK_NOT_FOUND");
-  }
+// Resolve uma lista de nomes (import de deck): primeiro o cache, depois a
+// Scryfall em lote pelo nome exato e, por fim, a busca fuzzy pros que sobraram.
+// As chaves do mapa sao os nomes em minusculas.
+export async function resolveCardsByNames(
+  names: string[],
+  game: string,
+): Promise<{ found: Map<string, Card>; notFound: string[] }> {
+  assertSupportedGame(game);
+  const found = new Map<string, Card>();
 
-  const card = await getCardByInternalId(cardId, deck.game);
+  const remember = (card: Card) => {
+    for (const alias of cardAliases(card)) {
+      found.set(cardNameKey(alias), card);
+    }
+  };
 
-  const deckCard = await prisma.deckCard.findUnique({
-    where: { deckId_cardId: { deckId, cardId: card.id } },
+  const cached = await prisma.card.findMany({
+    where: {
+      game: MTG,
+      OR: names.flatMap((name) => [
+        { name: { equals: name, mode: "insensitive" as const } },
+        // So a face da frente de uma carta de duas faces.
+        { name: { startsWith: `${name} // `, mode: "insensitive" as const } },
+      ]),
+    },
   });
+  cached.forEach(remember);
 
-  if (!deckCard) {
-    throw new HttpError(404, `Carta ${card.name} não está no deck ${deckId}.`, "CARD_NOT_IN_DECK");
+  const missing = names.filter((name) => !found.has(cardNameKey(name)));
+  if (missing.length > 0) {
+    const { cards } = await getCardsByNames(missing);
+    (await cacheScryfallCards(cards)).forEach(remember);
+
+    const stillMissing = missing.filter((name) => !found.has(cardNameKey(name)));
+    for (const name of stillMissing.slice(0, FUZZY_FALLBACK_LIMIT)) {
+      await waitForScryfall();
+      try {
+        found.set(cardNameKey(name), await cacheScryfallCard(await searchCardByName(name)));
+      } catch (error) {
+        if (!(error instanceof HttpError && error.status === 404)) {
+          throw error;
+        }
+      }
+    }
   }
 
-  if (deckCard.quantity > 1) {
-    await prisma.deckCard.update({
-      where: { deckId_cardId: { deckId, cardId: card.id } },
-      data: { quantity: { decrement: 1 } },
-    });
-  } else {
-    await prisma.deckCard.delete({
-      where: { deckId_cardId: { deckId, cardId: card.id } },
-    });
-  }
-
-  console.log(`Carta ${card.name} removida do deck ${deckId}.`);
+  return { found, notFound: names.filter((name) => !found.has(cardNameKey(name))) };
 }
