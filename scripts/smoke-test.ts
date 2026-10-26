@@ -5,7 +5,6 @@
  * servidor já rodando (`npm run dev`).
  */
 import { env } from "../src/config/env";
-import { prisma } from "../src/config/prisma";
 
 const BASE_URL = `http://localhost:${env.port}/api`;
 const TEST_EMAIL = "teste.deckforge@yopmail.com";
@@ -143,7 +142,8 @@ async function main() {
     404,
     { token, body: { externalId: BLACK_LOTUS_EXTERNAL_ID } },
   );
-  await call("POST /decks/:deckId/cards (sucesso)", "POST", `/decks/${deckId}/cards`, 204, {
+  // Devolve o deck atualizado, com o id interno de cada carta.
+  const deckWithCard = await call("POST /decks/:deckId/cards (sucesso)", "POST", `/decks/${deckId}/cards`, 200, {
     token,
     body: { externalId: BLACK_LOTUS_EXTERNAL_ID },
   });
@@ -156,16 +156,13 @@ async function main() {
     { token },
   );
 
-  // cardId aqui é o id INTERNO da tabela `cards` (gap conhecido: nenhuma
-  // rota da API expõe esse id hoje, então buscamos direto no banco).
-  const card = await prisma.card.findUnique({
-    where: { externalId_game: { externalId: BLACK_LOTUS_EXTERNAL_ID, game: "mtg" } },
-  });
+  // cardId aqui é o id INTERNO da tabela `cards`, que vem em `cards[].id`.
+  const card = deckWithCard?.cards?.find((c: { externalId: string }) => c.externalId === BLACK_LOTUS_EXTERNAL_ID);
   await call(
     "DELETE /decks/:deckId/cards/:cardId (sucesso)",
     "DELETE",
     `/decks/${deckId}/cards/${card?.id}`,
-    204,
+    200,
     { token },
   );
 
@@ -174,8 +171,6 @@ async function main() {
   await call("DELETE /decks/:deckId já deletado", "DELETE", `/decks/${deckId}`, 404, { token });
 
   await call("GET rota inexistente", "GET", "/rota-que-nao-existe", 404);
-
-  await prisma.$disconnect();
 
   console.log("");
   console.table(
