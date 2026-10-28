@@ -107,8 +107,8 @@ describe("cards.service com Pokémon", () => {
     expect(pokemon.searchPokemonCardByName).not.toHaveBeenCalled();
   });
 
-  it("lista as impressões só com o necessário para escolher a arte", async () => {
-    pokemon.searchPokemonCardPrints.mockResolvedValue([charizardRaw]);
+  it("lista as impressões só com o necessário para escolher a arte e saber se vale no Standard", async () => {
+    pokemon.searchPokemonCardPrints.mockResolvedValue([{ ...charizardRaw, regulationMark: "J" }]);
 
     await expect(getCardPrints("Charizard", "pokemon")).resolves.toEqual([
       {
@@ -117,6 +117,7 @@ describe("cards.service com Pokémon", () => {
         imageUrl: "https://images.pokemontcg.io/me55c/4_hires.png",
         setName: "30th Celebration: Classic Collection",
         collectorNumber: "4",
+        regulationMark: "J",
       },
     ]);
   });

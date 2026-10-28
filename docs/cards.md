@@ -82,10 +82,12 @@ Pokémon:
   "imageUrl": "https://images.pokemontcg.io/base1/4_hires.png",
   "rarity": "Rare Holo",
   "setName": "Base",
+  "setCode": "BS",
   "collectorNumber": "4",
   "legalities": { "standard": "not_legal", "expanded": "not_legal", "unlimited": "legal" },
   "supertype": "Pokémon",
   "subtypes": ["Stage 2"],
+  "evolvesFrom": "Charmeleon",
   "hp": 120,
   "types": ["Fire"],
   "attacks": [{ "name": "Fire Spin", "cost": ["Fire", "Fire", "Fire", "Fire"], "damage": "100", "text": "…" }],
@@ -101,6 +103,8 @@ Pokémon:
 Como os campos do Pokémon se comportam:
 
 - `supertype` é `Pokémon`, `Trainer` ou `Energy`.
+- `setCode` é a sigla da coleção usada pelo Pokémon TCG Live (`SVI`, `PAL`…). Sets antigos e algumas promos não têm, e vêm com `null`.
+- `evolvesFrom` é o nome do Pokémon de que a carta evolui (`null` em Básicos, Treinadores e Energias).
 - Treinadores e Energias vêm com `hp: null` e com listas vazias nos campos que não têm.
 - `damage` pode ter modificador (`"30+"`, `"20×"`) e é `null` em ataque sem dano.
 - `legalities` sempre traz os três formatos.
@@ -164,18 +168,22 @@ Vem só a primeira página da API externa: até 175 impressões no Magic e 250 n
       "name": "Charizard",
       "imageUrl": "https://images.pokemontcg.io/me55c/4_hires.png",
       "setName": "30th Celebration: Classic Collection",
-      "collectorNumber": "4"
+      "collectorNumber": "4",
+      "regulationMark": "J"
     },
     {
       "externalId": "base1-4",
       "name": "Charizard",
       "imageUrl": "https://images.pokemontcg.io/base1/4_hires.png",
       "setName": "Base",
-      "collectorNumber": "4"
+      "collectorNumber": "4",
+      "regulationMark": null
     }
   ]
 }
 ```
+
+`regulationMark` é a marca de regulação da impressão, que define se ela vale no Standard. Vem `null` em cartas antigas, que não têm marca, e em todas as cartas de Magic.
 
 Um nome sem nenhuma impressão responde `200` com `{ "prints": [] }`.
 

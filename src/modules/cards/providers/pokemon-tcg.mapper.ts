@@ -31,12 +31,17 @@ export function mapPokemonCard(raw: any) {
     imageUrl: raw.images?.large ?? null,
     rarity: raw.rarity ?? null,
     setName: raw.set?.name ?? null,
+    // Sigla que o Pokémon TCG Live usa nas listas ("SVI", "PAL"); sets antigos
+    // e algumas promos nao tem.
+    setCode: raw.set?.ptcgoCode ?? null,
     collectorNumber: raw.number ?? null,
     // Cartas de set recem-lancado as vezes chegam sem `legalities` nenhum (nem
     // unlimited); ai vale a do set. Banimento sempre vem na propria carta.
     legalities: pokemonLegalities(raw.legalities ?? raw.set?.legalities),
     supertype: raw.supertype ?? null,
     subtypes,
+    // Nome do Pokémon de que este evolui; e' o que liga as linhas evolutivas.
+    evolvesFrom: raw.evolvesFrom ?? null,
     // A API manda o hp como texto ("120").
     hp: raw.hp ? Number(raw.hp) : null,
     types: list(raw.types),

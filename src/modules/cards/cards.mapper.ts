@@ -35,7 +35,8 @@ export function cardText(game: string, raw: any): string | null {
   return mapperFor(game).text(raw);
 }
 
-// Uma impressao na lista de GET /cards/search: o suficiente pra escolher a arte.
+// Uma impressao na lista de GET /cards/search: o suficiente pra escolher a arte
+// e, no Pokemon, saber se ela vale no Standard (que segue a marca de regulacao).
 export function toCardPrint(game: string, raw: any) {
   const card = mapCard(game, raw);
   return {
@@ -44,6 +45,7 @@ export function toCardPrint(game: string, raw: any) {
     imageUrl: card.imageUrl,
     setName: card.setName,
     collectorNumber: card.collectorNumber,
+    regulationMark: "regulationMark" in card ? card.regulationMark : null,
   };
 }
 

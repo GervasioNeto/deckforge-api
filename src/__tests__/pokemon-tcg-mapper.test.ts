@@ -31,7 +31,7 @@ const charizard = {
   resistances: [{ type: "Fighting", value: "-30" }],
   retreatCost: ["Colorless", "Colorless", "Colorless"],
   convertedRetreatCost: 3,
-  set: { id: "base1", name: "Base" },
+  set: { id: "base1", name: "Base", ptcgoCode: "BS" },
   number: "4",
   rarity: "Rare Holo",
   legalities: { unlimited: "Legal" },
@@ -86,6 +86,7 @@ describe("mapPokemonCard", () => {
       imageUrl: "https://images.pokemontcg.io/base1/4_hires.png",
       rarity: "Rare Holo",
       setName: "Base",
+      setCode: "BS",
       collectorNumber: "4",
     });
   });
@@ -94,6 +95,7 @@ describe("mapPokemonCard", () => {
     const card = mapPokemonCard(charizard);
 
     expect(card.supertype).toBe("Pokémon");
+    expect(card.evolvesFrom).toBe("Charmeleon");
     expect(card.subtypes).toEqual(["Stage 2"]);
     expect(card.hp).toBe(120);
     expect(card.types).toEqual(["Fire"]);
