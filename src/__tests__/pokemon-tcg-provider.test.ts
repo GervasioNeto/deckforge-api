@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  POKEMON_TCG_ATTEMPTS,
   autocompletePokemonCardNames,
   getPokemonCardById,
   getPokemonCardsByNames,
@@ -142,21 +143,60 @@ describe("getPokemonCardById", () => {
     await expect(getPokemonCardById("nao-existe")).rejects.toMatchObject({ status: 404, code: "CARD_NOT_FOUND" });
   });
 
-  it("transforma erro da API em UPSTREAM_ERROR, mesmo quando o corpo não é JSON", async () => {
-    fetchMock.mockResolvedValue(new Response("error code: 502", { status: 502 }));
-
-    await expect(getPokemonCardById("base1-4")).rejects.toMatchObject({ status: 502, code: "UPSTREAM_ERROR" });
-  });
-
-  it("transforma o timeout em UPSTREAM_ERROR 504", async () => {
+  it("transforma o timeout em UPSTREAM_ERROR 504, sem tentar de novo", async () => {
     fetchMock.mockRejectedValue(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
 
     await expect(getPokemonCardById("base1-4")).rejects.toMatchObject({ status: 504, code: "UPSTREAM_ERROR" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("transforma falha de rede em UPSTREAM_ERROR 502", async () => {
-    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+  it("não repete o 404", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 404 } }, 404));
 
-    await expect(getPokemonCardById("base1-4")).rejects.toMatchObject({ status: 502, code: "UPSTREAM_ERROR" });
+    await expect(getPokemonCardById("nao-existe")).rejects.toMatchObject({ code: "CARD_NOT_FOUND" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("tentativas", () => {
+  // As pausas entre as tentativas passam no relogio falso, sem esperar de verdade.
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("tenta de novo quando a API falha na hora e devolve a carta", async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response("error code: 502", { status: 502 }))
+      .mockResolvedValueOnce(new Response("", { status: 500 }))
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: "base1-4" } }));
+
+    const request = getPokemonCardById("base1-4");
+    await vi.runAllTimersAsync();
+
+    await expect(request).resolves.toEqual({ id: "base1-4" });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("desiste depois de todas as tentativas, mesmo quando o corpo não é JSON", async () => {
+    fetchMock.mockImplementation(async () => new Response("error code: 502", { status: 502 }));
+
+    const request = getPokemonCardById("base1-4");
+    const failed = expect(request).rejects.toMatchObject({ status: 502, code: "UPSTREAM_ERROR" });
+    await vi.runAllTimersAsync();
+
+    await failed;
+    expect(fetchMock).toHaveBeenCalledTimes(POKEMON_TCG_ATTEMPTS);
+  });
+
+  it("não repete um erro que não passa sozinho, como o limite de requisições", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 429 } }, 429));
+
+    await expect(getPokemonCardById("base1-4")).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

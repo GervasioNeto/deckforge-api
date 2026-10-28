@@ -25,6 +25,15 @@ const POKEMON_TCG_HEADERS: Record<string, string> = env.pokemonTcgApiKey
   ? { Accept: "application/json", "X-Api-Key": env.pokemonTcgApiKey }
   : { Accept: "application/json" };
 
+// A API anda instavel: boa parte das chamadas volta 500/502 na hora (em ~0,3s)
+// e passa numa nova tentativa. Sem repetir, um import de 3 lotes quase nunca
+// fechava. Timeout nao entra: cada um ja custou 10s.
+export const POKEMON_TCG_ATTEMPTS = 6;
+export const POKEMON_TCG_RETRY_DELAY_MS = 300;
+const RETRYABLE_STATUSES = new Set([500, 502, 503, 504]);
+
+type Attempt = { ok: true; data: any } | { ok: false; error: HttpError; retryable: boolean };
+
 // Timeout ou falha de rede. O erro original vai no `cause`, pra aparecer no log.
 function upstreamError(error: unknown): HttpError {
   const timedOut = error instanceof Error && error.name === "TimeoutError";
@@ -35,7 +44,7 @@ function upstreamError(error: unknown): HttpError {
   return upstream;
 }
 
-async function pokemonTcgRequest(path: string, notFoundMessage?: string) {
+async function attemptRequest(path: string, notFoundMessage?: string): Promise<Attempt> {
   try {
     // O timeout vale ate o corpo terminar de chegar, nao so os headers.
     const response = await fetch(`${POKEMON_TCG_BASE_URL}${path}`, {
@@ -47,17 +56,34 @@ async function pokemonTcgRequest(path: string, notFoundMessage?: string) {
     // da API chegam em HTML ou texto puro ("error code: 502"), nao em JSON.
     if (!response.ok) {
       if (response.status === 404 && notFoundMessage) {
-        throw new HttpError(404, notFoundMessage, "CARD_NOT_FOUND");
+        return { ok: false, error: new HttpError(404, notFoundMessage, "CARD_NOT_FOUND"), retryable: false };
       }
-      throw new HttpError(502, `Pokémon TCG API respondeu ${response.status}.`, "UPSTREAM_ERROR");
+      return {
+        ok: false,
+        error: new HttpError(502, `Pokémon TCG API respondeu ${response.status}.`, "UPSTREAM_ERROR"),
+        retryable: RETRYABLE_STATUSES.has(response.status),
+      };
     }
 
-    return (await response.json()) as any;
+    return { ok: true, data: await response.json() };
   } catch (error) {
-    if (error instanceof HttpError) {
-      throw error;
+    const upstream = upstreamError(error);
+    // Falha de rede vale outra tentativa; timeout nao.
+    return { ok: false, error: upstream, retryable: upstream.status === 502 };
+  }
+}
+
+async function pokemonTcgRequest(path: string, notFoundMessage?: string) {
+  for (let attempt = 1; ; attempt++) {
+    const result = await attemptRequest(path, notFoundMessage);
+    if (result.ok) {
+      return result.data as any;
     }
-    throw upstreamError(error);
+    if (!result.retryable || attempt >= POKEMON_TCG_ATTEMPTS) {
+      throw result.error;
+    }
+    // Espera um pouco mais a cada vez (0,3s, 0,6s, 0,9s...).
+    await new Promise((resolve) => setTimeout(resolve, POKEMON_TCG_RETRY_DELAY_MS * attempt));
   }
 }
 
