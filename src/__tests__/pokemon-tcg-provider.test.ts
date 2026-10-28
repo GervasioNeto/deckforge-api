@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPokemonCardById, searchPokemonCardByName } from "../modules/cards/providers/pokemon-tcg.provider";
+import {
+  autocompletePokemonCardNames,
+  getPokemonCardById,
+  getPokemonCardsByNames,
+  searchPokemonCardByName,
+  searchPokemonCardPrints,
+} from "../modules/cards/providers/pokemon-tcg.provider";
 
 // O env de verdade exige DATABASE_URL e companhia; aqui so a chave importa.
 vi.mock("../config/env", () => ({ env: { pokemonTcgApiKey: "chave-de-teste" } }));
@@ -13,6 +19,87 @@ afterEach(() => {
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+// Os parametros de busca da chamada `index` ao fetch.
+const searchParams = (index = 0) => new URL(fetchMock.mock.calls[index][0]).searchParams;
+
+describe("getPokemonCardsByNames", () => {
+  it("busca 10 nomes por requisição e fica com a impressão mais nova de cada", async () => {
+    const names = Array.from({ length: 12 }, (_, i) => `Carta ${i + 1}`);
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          // Ja vem da mais nova pra mais antiga, como a API manda.
+          data: [
+            { id: "nova-1", name: "Carta 1" },
+            { id: "velha-1", name: "Carta 1" },
+            { id: "unica-2", name: "Carta 2" },
+          ],
+          totalCount: 3,
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "unica-11", name: "Carta 11" }], totalCount: 1 }));
+
+    const { cards, notFound } = await getPokemonCardsByNames(names);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(searchParams(0).get("q")).toBe(names.slice(0, 10).map((name) => `!name:"${name}"`).join(" OR "));
+    expect(searchParams(0).get("orderBy")).toBe("-set.releaseDate");
+    expect(searchParams(1).get("q")).toBe('!name:"Carta 11" OR !name:"Carta 12"');
+    expect(cards.map((card) => card.id)).toEqual(["nova-1", "unica-2", "unica-11"]);
+    expect(notFound).toEqual(names.filter((name) => !["Carta 1", "Carta 2", "Carta 11"].includes(name)));
+  });
+
+  it("busca um a um os nomes que uma página cheia deixou de fora", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "pikachu-1", name: "Pikachu" }], totalCount: 400 }))
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "raichu-1", name: "Raichu" }], totalCount: 1 }));
+
+    const { cards, notFound } = await getPokemonCardsByNames(["Pikachu", "Raichu"]);
+
+    expect(searchParams(1).get("q")).toBe('!name:"Raichu"');
+    expect(cards.map((card) => card.id)).toEqual(["pikachu-1", "raichu-1"]);
+    expect(notFound).toEqual([]);
+  });
+});
+
+describe("autocompletePokemonCardNames", () => {
+  it("transforma cada palavra num prefixo e ignora a pontuação", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [] }));
+
+    await autocompletePokemonCardNames("Porygon-Z");
+
+    expect(searchParams().get("q")).toBe("name:porygon* name:z*");
+    expect(searchParams().get("select")).toBe("name");
+  });
+
+  it("tira os nomes repetidos e põe primeiro os que começam com o texto digitado", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        data: [{ name: "Big Charm" }, { name: "Charizard" }, { name: "Charizard" }, { name: "Charmander" }],
+      }),
+    );
+
+    await expect(autocompletePokemonCardNames("char")).resolves.toEqual(["Charizard", "Charmander", "Big Charm"]);
+  });
+
+  it("não consulta a API quando não sobra nenhuma palavra", async () => {
+    await expect(autocompletePokemonCardNames("*!")).resolves.toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("searchPokemonCardPrints", () => {
+  it("lista as impressões do nome exato, da mais nova para a mais antiga", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [{ id: "me55c-4" }, { id: "base1-4" }] }));
+
+    const prints = await searchPokemonCardPrints("Charizard");
+
+    expect(prints.map((card) => card.id)).toEqual(["me55c-4", "base1-4"]);
+    expect(searchParams().get("q")).toBe('!name:"Charizard"');
+    expect(searchParams().get("orderBy")).toBe("-set.releaseDate");
+  });
+});
 
 describe("searchPokemonCardByName", () => {
   it("busca pelo nome exato, da edição mais nova, mandando a chave e um timeout", async () => {

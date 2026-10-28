@@ -109,6 +109,26 @@ export async function autocompleteCardNames(query: string): Promise<string[]> {
   return Array.isArray(data.data) ? data.data : [];
 }
 
+// Todas as impressoes de uma carta (nome exato), da mais nova pra mais antiga.
+// So a primeira pagina (ate 175): basta pra escolher uma arte.
+export async function searchCardPrints(name: string): Promise<any[]> {
+  const query = encodeURIComponent(`!"${name.replace(/"/g, "")}"`);
+  try {
+    const data = await scryfallRequest(
+      `/cards/search?q=${query}&unique=prints&order=released&dir=desc`,
+      {},
+      `Carta '${name}' não encontrada.`,
+    );
+    return Array.isArray(data.data) ? data.data : [];
+  } catch (error) {
+    // A Scryfall responde 404 quando a busca nao acha nada.
+    if (error instanceof HttpError && error.status === 404) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 // Busca varias cartas pelo nome exato, em lotes de 75 (POST /cards/collection).
 // Retorna as cartas cruas da Scryfall e os nomes que ela nao reconheceu.
 export async function getCardsByNames(names: string[]): Promise<{ cards: any[]; notFound: string[] }> {
