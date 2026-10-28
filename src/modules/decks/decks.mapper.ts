@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
-import { mapScryfallCard } from "../cards/providers/scryfall.provider";
+import { mapCard } from "../cards/cards.mapper";
 
 // Formato das respostas de deck. As rotas nunca devolvem `rawData` (a
-// resposta inteira da Scryfall, varios KB por carta): so os campos mapeados.
+// resposta inteira da API externa, varios KB por carta): so os campos mapeados.
 
 export const deckDetailInclude = {
   user: { select: { id: true, name: true } },
@@ -58,12 +58,14 @@ function countCards(cards: { board: string; quantity: number }[]): number {
 export function toDeckCard(deckCard: DeckWithCards["deckCards"][number]) {
   const { card } = deckCard;
   const rawData = typeof card.rawData === "object" && card.rawData !== null ? card.rawData : {};
-  const mapped = mapScryfallCard({ id: card.externalId, name: card.name, ...rawData });
+  // Pelo jogo da carta: os campos comuns (nome, imagem, tipo...) sao iguais
+  // nos dois mappers, o resto e' de cada jogo.
+  const mapped = mapCard(card.game, { id: card.externalId, name: card.name, ...rawData });
 
   return {
     ...mapped,
     // `id` e' o nosso id interno (o das rotas /decks/:deckId/cards/:cardId);
-    // o da Scryfall vai em `externalId`.
+    // o da API externa vai em `externalId`.
     id: card.id,
     externalId: card.externalId,
     // Cartas antigas no cache podem ter image_url "" (duas faces).

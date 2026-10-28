@@ -35,6 +35,7 @@ vi.mock("../config/prisma", () => {
               quantity: 2,
               card: {
                 id: "card-123",
+                game: "pokemon",
                 name: "Charizard",
                 imageUrl: "http://imagem.com/char.jpg",
               },

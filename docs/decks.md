@@ -35,7 +35,9 @@ A mesma carta pode estar em mais de um board. `cardCount` soma só `main` e `com
 | `mtg`     | `standard`, `pioneer`, `modern`, `legacy`, `vintage`, `pauper`, `commander` |
 | `pokemon` | `standard`, `expanded`, `unlimited`                                         |
 
-**IDs de carta**: `cards[].id` é o ID interno (usado nas rotas `/decks/:deckId/cards/:cardId`); `cards[].externalId` é o da Scryfall.
+**IDs de carta**: `cards[].id` é o ID interno (usado nas rotas `/decks/:deckId/cards/:cardId`); `cards[].externalId` é o da API externa (Scryfall no Magic, Pokémon TCG API no Pokémon).
+
+**Cartas por jogo**: as cartas de um deck são buscadas na API do jogo do deck (`game`).
 
 ---
 
@@ -115,6 +117,8 @@ Decks do usuário logado, mais recentes primeiro, com `cardCount` e `coverImageU
 
 `shareToken` só vem para o dono. `faces` lista as faces de cartas duplas/divididas; `backImageUrl` é a imagem do verso (cartas transform/MDFC).
 
+Num deck Pokémon, cada item de `cards` tem `id`, `externalId`, `board` e `quantity`. Os demais campos seguem o formato de carta Pokémon de [cards.md](cards.md): `typeLine`, `hp`, `attacks`, `legalities`… Não há campos de Magic como `manaCost`.
+
 ### Editar deck
 
 `PATCH /decks/:deckId`
@@ -151,7 +155,9 @@ Todas estas rotas respondem `200` com o deck completo já atualizado (mesmo form
 { "name": "Lightning Bolt", "quantity": 4, "board": "main" }
 ```
 
-Use `externalId` (de `GET /cards`) **ou** `name`. `quantity` (1–999) e `board` são opcionais (padrão `1` e `main`); cópias se somam às que já estão no board.
+Use `externalId` (de `GET /cards` ou de uma impressão de `GET /cards/search`) **ou** `name`. `quantity` (1–999) e `board` são opcionais (padrão `1` e `main`); cópias se somam às que já estão no board.
+
+Pelo `name`, num deck Magic vale a busca aproximada da Scryfall. Num deck Pokémon, o nome precisa ser exato e entra a impressão mais recente. Uma impressão dessa carta que já esteja no cache é reaproveitada.
 
 ### Definir quantidade
 
@@ -193,7 +199,10 @@ Remove uma cópia; na última, tira a carta do board.
 }
 ```
 
-Até 250 linhas. Os nomes são resolvidos no cache, depois na Scryfall pelo nome exato e, por fim, pela busca aproximada. `replace: true` troca todo o conteúdo do deck.
+Até 250 linhas. `replace: true` troca todo o conteúdo do deck. Os nomes são resolvidos assim:
+
+- **Magic**: no cache; depois na Scryfall pelo nome exato; por fim, pela busca aproximada (até 15 nomes), que pega erros de digitação.
+- **Pokémon**: no cache; depois na Pokémon TCG API pelo nome exato, em lotes de 10 nomes, ficando com a impressão mais recente de cada. Não há busca aproximada, então um nome digitado errado vai para `notFound`.
 
 ```json
 { "deck": { "…": "deck completo" }, "imported": 6, "notFound": ["Carta Inventada"] }
@@ -208,10 +217,10 @@ Até 250 linhas. Os nomes são resolvidos no cache, depois na Scryfall pelo nome
 | 400    | `INVALID_DECK_ID`     | `deckId` não é um UUID                              |
 | 400    | `INVALID_CARD_ID`     | `cardId` não é um UUID                              |
 | 400    | `VALIDATION_ERROR`    | Corpo ou query inválidos (a `message` diz qual)     |
-| 400    | `GAME_NOT_SUPPORTED`  | Cartas desse jogo ainda não são suportadas          |
 | 401    | `UNAUTHORIZED`        | Token ausente, inválido ou expirado                 |
 | 404    | `DECK_NOT_FOUND`      | Deck não existe ou não é acessível a este usuário   |
-| 404    | `CARD_NOT_FOUND`      | Carta não encontrada na Scryfall                    |
+| 404    | `CARD_NOT_FOUND`      | Carta não encontrada na API externa                 |
 | 404    | `CARD_NOT_IN_DECK`    | A carta não está nesse board do deck                |
 | 422    | `NO_CARDS_RECOGNIZED` | Nenhuma carta da lista importada foi reconhecida    |
-| 502    | `UPSTREAM_ERROR`      | A Scryfall falhou                                   |
+| 502    | `UPSTREAM_ERROR`      | A API externa (Scryfall ou Pokémon TCG API) falhou  |
+| 504    | `UPSTREAM_ERROR`      | A Pokémon TCG API não respondeu em 10s              |

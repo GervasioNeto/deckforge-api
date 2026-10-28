@@ -14,4 +14,7 @@ export const env = {
   databaseUrl: required("DATABASE_URL"),
   supabaseUrl: required("SUPABASE_URL"),
   supabaseAnonKey: required("SUPABASE_ANON_KEY"),
+  // Opcional: sem chave a Pokemon TCG API responde igual, so com limite de
+  // requisicoes menor. `||` porque o .env.example traz a variavel vazia.
+  pokemonTcgApiKey: process.env.POKEMON_TCG_API_KEY || undefined,
 };

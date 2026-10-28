@@ -78,6 +78,7 @@ function deckRow(overrides: Record<string, unknown> = {}) {
         card: {
           id: CARD_ID,
           externalId: "scryfall-1",
+          game: "mtg",
           name: "Deceit",
           imageUrl: "https://cards.scryfall.io/normal/deceit.jpg",
           rawData: { id: "scryfall-1", name: "Deceit", mana_cost: "{4}{U}{B}", cmc: 6, type_line: "Creature" },
@@ -280,6 +281,87 @@ describe("POST /decks/:deckId/cards/import", () => {
     expect(response.status).toBe(422);
     expect(response.body.error).toBe("NO_CARDS_RECOGNIZED");
     expect(db.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("deck Pokémon", () => {
+  const pokemonDeck = () =>
+    deckRow({
+      game: "pokemon",
+      format: "standard",
+      deckCards: [
+        {
+          deckId: DECK_ID,
+          cardId: CARD_ID,
+          board: "main",
+          quantity: 2,
+          card: {
+            id: CARD_ID,
+            externalId: "base1-4",
+            game: "pokemon",
+            name: "Charizard",
+            imageUrl: "https://images.pokemontcg.io/base1/4_hires.png",
+            rawData: {
+              id: "base1-4",
+              name: "Charizard",
+              supertype: "Pokémon",
+              subtypes: ["Stage 2"],
+              hp: "120",
+              types: ["Fire"],
+              attacks: [{ name: "Fire Spin", cost: ["Fire", "Fire", "Fire", "Fire"], damage: "100", text: "..." }],
+              set: { name: "Base" },
+              number: "4",
+              legalities: { unlimited: "Legal" },
+              images: { large: "https://images.pokemontcg.io/base1/4_hires.png" },
+            },
+          },
+        },
+      ],
+    });
+
+  beforeEach(() => {
+    db.deck.findFirst.mockResolvedValue(pokemonDeck());
+  });
+
+  it("mostra as cartas com os campos do Pokémon, pelo jogo da carta", async () => {
+    const response = await request(app).get(`/api/decks/${DECK_ID}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.cards[0]).toMatchObject({
+      id: CARD_ID,
+      externalId: "base1-4",
+      typeLine: "Pokémon — Stage 2",
+      hp: 120,
+      types: ["Fire"],
+      legalities: { standard: "not_legal", expanded: "not_legal", unlimited: "legal" },
+      board: "main",
+      quantity: 2,
+    });
+    // Campo so do Magic: nao aparece numa carta Pokemon.
+    expect(response.body.cards[0].manaCost).toBeUndefined();
+  });
+
+  it("adiciona carta pelo nome buscando no jogo do deck", async () => {
+    cards.findOrFetchCard.mockResolvedValue({ id: CARD_ID, name: "Charizard" });
+
+    const response = await request(app).post(`/api/decks/${DECK_ID}/cards`).send({ name: "Charizard", quantity: 2 });
+
+    expect(response.status).toBe(200);
+    expect(cards.findOrFetchCard).toHaveBeenCalledWith({ name: "Charizard" }, "pokemon");
+  });
+
+  it("importa a lista buscando no jogo do deck", async () => {
+    cards.resolveCardsByNames.mockResolvedValue({
+      found: new Map([["charizard", { id: CARD_ID, name: "Charizard" }]]),
+      notFound: [],
+    });
+
+    const response = await request(app)
+      .post(`/api/decks/${DECK_ID}/cards/import`)
+      .send({ entries: [{ name: "Charizard", quantity: 2 }] });
+
+    expect(response.status).toBe(200);
+    expect(cards.resolveCardsByNames).toHaveBeenCalledWith(["Charizard"], "pokemon");
   });
 });
 
