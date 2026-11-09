@@ -2,7 +2,7 @@ import { Prisma, type Deck } from "@prisma/client";
 import { prisma } from "../../config/prisma";
 import { HttpError } from "../../middlewares/error-handler";
 import { cardNameKey, findOrFetchCard, resolveCardsByNames } from "../cards/cards.service";
-import { Board, DECK_NAME_MAX_LENGTH, Game } from "./decks.constants";
+import { Board, DECK_NAME_MAX_LENGTH, Game, MAX_CARD_QUANTITY } from "./decks.constants";
 import { deckDetailInclude, deckSummaryInclude, toDeckDetail, toDeckSummary } from "./decks.mapper";
 import { ImportEntry, parseCreateDeck, parseDeckChanges } from "./decks.validation";
 
@@ -246,7 +246,15 @@ export async function importCards(deckId: string, userId: string, entries: Impor
     }
     const key = `${card.id}:${entry.board}`;
     const current = totals.get(key);
-    totals.set(key, { cardId: card.id, board: entry.board, quantity: (current?.quantity ?? 0) + entry.quantity });
+    const nextQuantity = (current?.quantity ?? 0) + entry.quantity;
+    if (nextQuantity > MAX_CARD_QUANTITY) {
+      throw new HttpError(
+        400,
+        `O campo 'quantity' deve ser um inteiro entre 1 e ${MAX_CARD_QUANTITY}.`,
+        "VALIDATION_ERROR",
+      );
+    }
+    totals.set(key, { cardId: card.id, board: entry.board, quantity: nextQuantity });
   }
 
   // Um INSERT so pra lista inteira: um upsert por carta sao dezenas de idas ao

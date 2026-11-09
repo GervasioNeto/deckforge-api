@@ -190,6 +190,23 @@ describe("cartas do deck", () => {
       .send({ name: "Deceit", board: "graveyard" });
 
     expect(response.status).toBe(400);
+    expect(response.body.error).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejeita quantidade fora do intervalo permitido (1 a 999) ou cardId inválido", async () => {
+    const badQty = await request(app)
+      .post(`/api/decks/${DECK_ID}/cards`)
+      .send({ name: "Deceit", quantity: 1000 });
+
+    expect(badQty.status).toBe(400);
+    expect(badQty.body.error).toBe("VALIDATION_ERROR");
+
+    const badCardId = await request(app)
+      .patch(`/api/decks/${DECK_ID}/cards/id-invalido`)
+      .send({ quantity: 2 });
+
+    expect(badCardId.status).toBe(400);
+    expect(badCardId.body.error).toBe("INVALID_CARD_ID");
   });
 
   it("quantidade 0 tira a carta do board", async () => {
@@ -231,6 +248,22 @@ describe("cartas do deck", () => {
     );
   });
 
+  it("exige from e to explícitos ao mover carta entre boards", async () => {
+    const missingTo = await request(app)
+      .post(`/api/decks/${DECK_ID}/cards/${CARD_ID}/move`)
+      .send({ from: "side" });
+
+    expect(missingTo.status).toBe(400);
+    expect(missingTo.body.error).toBe("VALIDATION_ERROR");
+
+    const missingFrom = await request(app)
+      .post(`/api/decks/${DECK_ID}/cards/${CARD_ID}/move`)
+      .send({ to: "side" });
+
+    expect(missingFrom.status).toBe(400);
+    expect(missingFrom.body.error).toBe("VALIDATION_ERROR");
+  });
+
   it("não move mais cópias do que existem", async () => {
     db.deckCard.findUnique.mockResolvedValue({ deckId: DECK_ID, cardId: CARD_ID, board: "main", quantity: 2 });
 
@@ -269,6 +302,26 @@ describe("POST /decks/:deckId/cards/import", () => {
     const [, rows] = db.$executeRaw.mock.calls[0];
     expect(rows.values).toEqual([DECK_ID, CARD_ID, "main", 3]);
     expect(db.deckCard.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("rejeita quando a soma de linhas repetidas da mesma carta e board ultrapassa 999 cópias", async () => {
+    cards.resolveCardsByNames.mockResolvedValue({
+      found: new Map([["mountain", { id: CARD_ID, name: "Mountain" }]]),
+      notFound: [],
+    });
+
+    const response = await request(app)
+      .post(`/api/decks/${DECK_ID}/cards/import`)
+      .send({
+        entries: [
+          { name: "Mountain", quantity: 600, board: "main" },
+          { name: "Mountain", quantity: 500, board: "main" },
+        ],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("VALIDATION_ERROR");
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 
   it("não apaga o deck quando nenhuma carta da lista é reconhecida", async () => {

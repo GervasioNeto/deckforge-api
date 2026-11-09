@@ -1,7 +1,7 @@
 {
   "_type": "export",
   "__export_format": 4,
-  "__export_date": "2026-09-16T20:00:00.000Z",
+  "__export_date": "2026-11-09T17:30:00.000Z",
   "__export_source": "deckforge-api.manual-export",
   "resources": [
     {
@@ -71,7 +71,10 @@
       "name": "GET /cards?name=... (sucesso)",
       "method": "GET",
       "url": "{{ _.base_url }}/cards",
-      "parameters": [{ "name": "name", "value": "Black Lotus" }],
+      "parameters": [
+        { "name": "name", "value": "Black Lotus" },
+        { "name": "game", "value": "mtg", "disabled": true }
+      ],
       "headers": [],
       "metaSortKey": 1
     },
@@ -84,6 +87,36 @@
       "url": "{{ _.base_url }}/cards",
       "headers": [],
       "metaSortKey": 2
+    },
+    {
+      "_id": "req_cards_autocomplete",
+      "_type": "request",
+      "parentId": "fld_cards",
+      "name": "GET /cards/autocomplete?q=... (sugestões de nomes)",
+      "description": "Sugere até 20 nomes de cartas a partir de 2 caracteres. Aceita o parâmetro opcional 'game' (mtg ou pokemon).",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cards/autocomplete",
+      "parameters": [
+        { "name": "q", "value": "Lightning" },
+        { "name": "game", "value": "mtg", "disabled": true }
+      ],
+      "headers": [],
+      "metaSortKey": 3
+    },
+    {
+      "_id": "req_cards_search_prints",
+      "_type": "request",
+      "parentId": "fld_cards",
+      "name": "GET /cards/search?q=... (listar impressões/edições)",
+      "description": "Lista as edições/impressões de uma carta pelo nome exato, da mais recente para a mais antiga, permitindo escolher a arte (externalId) antes de adicionar ao deck.",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cards/search",
+      "parameters": [
+        { "name": "q", "value": "Lightning Bolt" },
+        { "name": "game", "value": "mtg", "disabled": true }
+      ],
+      "headers": [],
+      "metaSortKey": 4
     },
 
     { "_id": "fld_me", "_type": "request_group", "parentId": "wrk_deckforge", "name": "3. Usuário", "metaSortKey": 4 },
@@ -115,14 +148,14 @@
       "_type": "request",
       "parentId": "fld_decks",
       "name": "POST /decks (sucesso)",
-      "description": "Copie o 'id' da resposta para a variável 'deckId' do Environment.",
+      "description": "Cria um novo deck. Copie o 'id' da resposta para a variável 'deckId' do Environment. Suporta format (ex: standard, pioneer, modern, legacy, vintage, pauper, commander) e description opcionais.",
       "method": "POST",
       "url": "{{ _.base_url }}/decks",
       "headers": [{ "name": "Content-Type", "value": "application/json" }],
       "authentication": { "type": "bearer", "token": "{{ _.token }}" },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"name\": \"Deck de Teste\",\n  \"game\": \"mtg\",\n  \"visibility\": \"public\"\n}"
+        "text": "{\n  \"name\": \"Deck de Teste\",\n  \"game\": \"mtg\",\n  \"format\": \"standard\",\n  \"description\": \"Deck criado para testes do editor\",\n  \"visibility\": \"public\"\n}"
       },
       "metaSortKey": 1
     },
@@ -200,20 +233,92 @@
       "metaSortKey": 5.5
     },
     {
+      "_id": "req_deck_detail",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "GET /decks/{deckId} (detalhes do deck)",
+      "description": "Retorna o deck completo com as cartas mapeadas (sem rawData), cardCount, coverImageUrl e shareToken (se for o dono). Token é opcional para decks públicos.",
+      "method": "GET",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 5.6
+    },
+    {
+      "_id": "req_deck_update",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "PATCH /decks/{deckId} (editar metadados, formato e capa)",
+      "description": "Atualização parcial do deck (name, visibility, format, description, coverCardId). O formato deve pertencer ao jogo do deck e coverCardId precisa ser o ID interno de uma carta presente no deck.",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Dimir Control Atualizado\",\n  \"visibility\": \"public\",\n  \"format\": \"modern\",\n  \"description\": \"Lista atualizada para o formato Modern\"\n}"
+      },
+      "metaSortKey": 5.7
+    },
+    {
+      "_id": "req_deck_update_bad_format",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "PATCH /decks/{deckId} com formato inválido (esperado 400)",
+      "description": "Rejeita formatos que não existem no jogo do deck (ex: 'expanded' em um deck de Magic).",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"format\": \"expanded\"\n}"
+      },
+      "metaSortKey": 5.8
+    },
+    {
+      "_id": "req_deck_duplicate",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/duplicate (duplicar deck)",
+      "description": "Cria uma cópia privada ('<nome> (cópia)') de um deck próprio ou público de outro usuário.",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/duplicate",
+      "headers": [],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "metaSortKey": 5.9
+    },
+    {
       "_id": "req_deck_add_card",
       "_type": "request",
       "parentId": "fld_decks",
-      "name": "POST /decks/{deckId}/cards (adicionar carta)",
-      "description": "Use um deckId válido (variável 'deckId') e um externalId de carta real (obtido em GET /cards).",
+      "name": "POST /decks/{deckId}/cards (adicionar carta por externalId)",
+      "description": "Adiciona carta pelo externalId (obtido em GET /cards ou GET /cards/search). Retorna o deck atualizado completo — copie 'cards[0].id' para a variável 'cardId' do Environment.",
       "method": "POST",
       "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards",
       "headers": [{ "name": "Content-Type", "value": "application/json" }],
       "authentication": { "type": "bearer", "token": "{{ _.token }}" },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"externalId\": \"{{ _.externalId }}\"\n}"
+        "text": "{\n  \"externalId\": \"{{ _.externalId }}\",\n  \"quantity\": 1,\n  \"board\": \"main\"\n}"
       },
       "metaSortKey": 6
+    },
+    {
+      "_id": "req_deck_add_card_by_name",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards (adicionar carta por nome e zona)",
+      "description": "Adiciona cópias de uma carta informando o nome, a quantidade (1–999) e o board ('main', 'side', 'maybe' ou 'commander').",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Lightning Bolt\",\n  \"quantity\": 4,\n  \"board\": \"main\"\n}"
+      },
+      "metaSortKey": 6.5
     },
     {
       "_id": "req_deck_add_card_invalid_deck",
@@ -231,6 +336,22 @@
       "metaSortKey": 7
     },
     {
+      "_id": "req_deck_add_card_invalid_board",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards com board inválido (esperado 400)",
+      "description": "Valida se o board informado pertence às zonas suportadas (main, side, maybe, commander).",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Lightning Bolt\",\n  \"quantity\": 1,\n  \"board\": \"graveyard\"\n}"
+      },
+      "metaSortKey": 7.5
+    },
+    {
       "_id": "req_deck_add_card_deck_not_found",
       "_type": "request",
       "parentId": "fld_decks",
@@ -246,13 +367,67 @@
       "metaSortKey": 8
     },
     {
+      "_id": "req_deck_set_card_quantity",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "PATCH /decks/{deckId}/cards/{cardId} (definir quantidade no board)",
+      "description": "Define a quantidade exata (0 a 999) da carta no board indicado via query param (?board=main). Quantidade 0 remove a carta do board.",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards/{{ _.cardId }}",
+      "parameters": [
+        { "name": "board", "value": "main" }
+      ],
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"quantity\": 3\n}"
+      },
+      "metaSortKey": 8.2
+    },
+    {
+      "_id": "req_deck_move_card",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards/{cardId}/move (mover carta entre zonas)",
+      "description": "Move cópias de uma carta entre boards (main, side, maybe, commander). Se 'quantity' for omitido, move todas as cópias do board de origem.",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards/{{ _.cardId }}/move",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"from\": \"main\",\n  \"to\": \"side\",\n  \"quantity\": 1\n}"
+      },
+      "metaSortKey": 8.4
+    },
+    {
+      "_id": "req_deck_import_cards",
+      "_type": "request",
+      "parentId": "fld_decks",
+      "name": "POST /decks/{deckId}/cards/import (importar lista de cartas)",
+      "description": "Importa uma lista de até 250 linhas para o deck. Com 'replace: true', substitui o conteúdo atual do deck; com 'replace: false', soma às cartas já existentes.",
+      "method": "POST",
+      "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards/import",
+      "headers": [{ "name": "Content-Type", "value": "application/json" }],
+      "authentication": { "type": "bearer", "token": "{{ _.token }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"entries\": [\n    { \"name\": \"Lightning Bolt\", \"quantity\": 4, \"board\": \"main\" },\n    { \"name\": \"Counterspell\", \"quantity\": 4, \"board\": \"main\" },\n    { \"name\": \"Negate\", \"quantity\": 2, \"board\": \"side\" }\n  ],\n  \"replace\": false\n}"
+      },
+      "metaSortKey": 8.6
+    },
+    {
       "_id": "req_deck_remove_card",
       "_type": "request",
       "parentId": "fld_decks",
-      "name": "DELETE /decks/{deckId}/cards/{cardId} (remover carta)",
-      "description": "ATENÇÃO: cardId aqui é o ID INTERNO do banco (tabela cards), não o externalId da Scryfall retornado por GET /cards. Não há hoje uma rota que devolva esse id interno ao cliente — é um gap conhecido da API. Peça esse id ao backend (ex: Prisma Studio) durante o teste.",
+      "name": "DELETE /decks/{deckId}/cards/{cardId} (remover uma cópia da carta)",
+      "description": "Remove 1 cópia da carta no board indicado (?board=main por padrão). Na última cópia, remove a carta do board. O cardId é o ID interno retornado em cards[].id nas respostas do deck.",
       "method": "DELETE",
       "url": "{{ _.base_url }}/decks/{{ _.deckId }}/cards/{{ _.cardId }}",
+      "parameters": [
+        { "name": "board", "value": "main" }
+      ],
       "headers": [],
       "authentication": { "type": "bearer", "token": "{{ _.token }}" },
       "metaSortKey": 9

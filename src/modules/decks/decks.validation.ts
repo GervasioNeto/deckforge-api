@@ -52,8 +52,8 @@ export function parseVisibility(value: unknown): Visibility {
   return value as Visibility;
 }
 
-export function parseBoard(value: unknown, field = "board"): Board {
-  if (value === undefined) {
+export function parseBoard(value: unknown, field = "board", { required = false }: { required?: boolean } = {}): Board {
+  if (value === undefined && !required) {
     return "main";
   }
   if (typeof value !== "string" || !(BOARDS as readonly string[]).includes(value)) {
@@ -135,13 +135,16 @@ export function parseDeckChanges(body: unknown, game: Game): DeckChanges {
   }
 
   const changes: DeckChanges = {};
-  if ("name" in body) changes.name = parseDeckName(body.name);
-  if ("visibility" in body) changes.visibility = parseVisibility(body.visibility);
-  if ("format" in body) changes.format = parseFormat(body.format, game);
-  if ("description" in body) changes.description = parseDescription(body.description);
-  if ("coverCardId" in body) {
+  if (body.name !== undefined) changes.name = parseDeckName(body.name);
+  if (body.visibility !== undefined) changes.visibility = parseVisibility(body.visibility);
+  if (body.format !== undefined) changes.format = parseFormat(body.format, game);
+  if (body.description !== undefined) changes.description = parseDescription(body.description);
+  if (body.coverCardId !== undefined) {
     if (body.coverCardId !== null) {
-      assertCardId(String(body.coverCardId));
+      if (typeof body.coverCardId !== "string") {
+        invalid(`'${String(body.coverCardId)}' não é um ID de carta válido.`, "INVALID_CARD_ID");
+      }
+      assertCardId(body.coverCardId);
     }
     changes.coverCardId = body.coverCardId as string | null;
   }
@@ -163,8 +166,13 @@ export function parseAddCard(body: unknown) {
     invalid("Informe 'externalId' ou 'name' da carta.");
   }
 
+  const trimmedName = hasName ? (name as string).trim() : "";
+  if (!hasExternalId && trimmedName.length > CARD_NAME_MAX_LENGTH) {
+    invalid(`O nome da carta pode ter no máximo ${CARD_NAME_MAX_LENGTH} caracteres.`);
+  }
+
   return {
-    ref: hasExternalId ? { externalId: (externalId as string).trim() } : { name: (name as string).trim() },
+    ref: hasExternalId ? { externalId: (externalId as string).trim() } : { name: trimmedName },
     quantity: parseQuantity(data.quantity, { fallback: 1 }),
     board: parseBoard(data.board),
   };
