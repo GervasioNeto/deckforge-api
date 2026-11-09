@@ -139,8 +139,8 @@ decksRoutes.post("/decks/:deckId/cards/:cardId/move", requireAuth, async (req, r
     const { deckId, cardId } = req.params;
     assertDeckId(deckId);
     assertCardId(cardId);
-    const from = parseBoard(req.body?.from, "from");
-    const to = parseBoard(req.body?.to, "to");
+    const from = parseBoard(req.body?.from, "from", { required: true });
+    const to = parseBoard(req.body?.to, "to", { required: true });
     const quantity = req.body?.quantity === undefined ? undefined : parseQuantity(req.body.quantity);
     return res.status(200).json(await moveCard(deckId, cardId, req.user!.id, { from, to, quantity }));
   } catch (error) {
