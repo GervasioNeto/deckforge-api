@@ -3,7 +3,8 @@ import { prisma } from "../../config/prisma";
 import { HttpError } from "../../middlewares/error-handler";
 import { cardNameKey, findOrFetchCard, resolveCardsByNames } from "../cards/cards.service";
 import { Board, DECK_NAME_MAX_LENGTH, Game, MAX_CARD_QUANTITY } from "./decks.constants";
-import { deckDetailInclude, deckSummaryInclude, toDeckDetail, toDeckSummary } from "./decks.mapper";
+import { publicName } from "../../utils/public-name";
+import { deckDetailInclude, deckSummaryInclude, toDeckDetail, toDeckSummary, toPublicDeckSummary } from "./decks.mapper";
 import { ImportEntry, parseCreateDeck, parseDeckChanges } from "./decks.validation";
 
 // Toda alteracao de cartas devolve o deck inteiro ja atualizado, assim o
@@ -49,12 +50,13 @@ export async function listUserDecks(userId: string) {
 }
 
 export async function listPublicDecks(game?: Game) {
-  return prisma.deck.findMany({
+  const decks = await prisma.deck.findMany({
     where: {
       visibility: "public",
       ...(game ? { game } : {}),
     },
     include: {
+      ...deckSummaryInclude,
       user: {
         select: {
           id: true,
@@ -64,6 +66,11 @@ export async function listPublicDecks(game?: Game) {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  return decks.map((deck) => ({
+    ...toPublicDeckSummary(deck),
+    user: { id: deck.user.id, name: publicName(deck.user.name) },
+  }));
 }
 
 export async function createDeck(userId: string, input: ReturnType<typeof parseCreateDeck>) {

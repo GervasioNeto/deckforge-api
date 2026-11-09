@@ -180,6 +180,9 @@ describe("Testes da Rota de Decks", () => {
         visibility: "public",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        shareToken: "token-secreto",
+        coverCard: null,
+        deckCards: [],
         user: {
           id: "autor-uuid-1",
           name: "Jogador 1",
@@ -199,15 +202,17 @@ describe("Testes da Rota de Decks", () => {
       id: "autor-uuid-1",
       name: "Jogador 1",
     });
+    expect(response.body[0].shareToken).toBeUndefined();
+    expect(response.body[0].cardCount).toBe(0);
 
     expect(prisma.deck.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { visibility: "public" },
-        include: {
+        include: expect.objectContaining({
           user: {
             select: { id: true, name: true },
           },
-        },
+        }),
         orderBy: { createdAt: "desc" },
       }),
     );
