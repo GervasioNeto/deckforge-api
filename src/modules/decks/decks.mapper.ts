@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { publicName } from "../../utils/public-name";
 import { mapCard } from "../cards/cards.mapper";
 
 // Formato das respostas de deck. As rotas nunca devolvem `rawData` (a
@@ -96,7 +97,7 @@ export function toDeckDetail(deck: DeckWithCards, viewerId?: string) {
     createdAt: deck.createdAt,
     updatedAt: deck.updatedAt,
     isOwner,
-    author: deck.user ? { id: deck.user.id, name: deck.user.name } : null,
+    author: deck.user ? { id: deck.user.id, name: publicName(deck.user.name) } : null,
     cardCount: countCards(cards),
     cards,
   };
@@ -117,4 +118,10 @@ export function toDeckSummary(deck: DeckWithSummary) {
     cardCount: countCards(candidates),
     coverImageUrl: pickCoverImage(candidates, coverCard?.imageUrl || null),
   };
+}
+
+// Deck visto por qualquer visitante: sem o shareToken, que e' coisa do dono.
+export function toPublicDeckSummary(deck: DeckWithSummary) {
+  const { shareToken: _shareToken, ...summary } = toDeckSummary(deck);
+  return summary;
 }

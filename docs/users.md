@@ -40,3 +40,23 @@ Retorna os dados cadastrais do próprio usuário que está logado no momento.
 | ---------- | --------------------------------------- |
 | 401        | Token ausente, inválido ou expirado     |
 | 404        | Perfil não encontrado no banco de dados |
+
+---
+
+### Atualizar o próprio nome
+
+`PATCH /me` (exige token). Corpo: `{ "name": "Novo nome" }`, de 1 a 60 caracteres. Responde `200` com o perfil atualizado e `400` (`VALIDATION_ERROR`) para um nome inválido.
+
+### Buscar usuários
+
+`GET /users/search?q=texto` (pública). Busca por nome, sem diferenciar maiúsculas, e devolve no máximo 20 resultados, nunca o e-mail. Com menos de 2 caracteres, responde lista vazia.
+
+```json
+{
+  "users": [
+    { "id": "123e4567-e89b-12d3-a456-426614174000", "name": "Emerson", "createdAt": "2026-09-15T10:00:00Z", "publicDeckCount": 3 }
+  ]
+}
+```
+
+Contas sem nome salvo aparecem como `Jogador` nas respostas públicas.
