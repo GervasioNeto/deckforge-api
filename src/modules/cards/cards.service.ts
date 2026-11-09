@@ -12,15 +12,25 @@ import { getCardProvider } from "./cards.providers";
 // deixar um import todo errado prender a requisicao por muito tempo.
 const FUZZY_FALLBACK_LIMIT = 15;
 
+// Normaliza espacos e pontuacao tipografica
+export const normalizeCardName = (name: string) =>
+  name
+    .trim()
+    .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\s+/g, " ");
+
 // Chave pra comparar nomes de carta sem diferenciar maiusculas.
-export const cardNameKey = (name: string) => name.trim().toLowerCase();
+export const cardNameKey = (name: string) => normalizeCardName(name).toLowerCase();
 
 function cardData(raw: any, game: string) {
+  const mapped = mapCard(game, raw);
   return {
     externalId: raw.id,
     game,
-    name: raw.name,
-    imageUrl: mapCard(game, raw).imageUrl ?? "",
+    name: raw.name ?? mapped.name ?? "",
+    imageUrl: mapped.imageUrl ?? "",
     text: cardText(game, raw),
     rawData: raw,
   };
@@ -53,7 +63,7 @@ function cardAliases(card: Card): string[] {
 
 async function findOrFetchCardByName(name: string, game: string): Promise<Card> {
   const provider = getCardProvider(game);
-  const normalizedName = name.trim().replace(/\+/g, " ");
+  const normalizedName = normalizeCardName(name.replace(/\+/g, " "));
   const cached = await prisma.card.findFirst({
     where: {
       name: { equals: normalizedName, mode: "insensitive" },
@@ -124,11 +134,14 @@ export async function resolveCardsByNames(
   const cached = await prisma.card.findMany({
     where: {
       game,
-      OR: names.flatMap((name) => [
-        { name: { equals: name, mode: "insensitive" as const } },
-        // So a face da frente de uma carta de duas faces.
-        { name: { startsWith: `${name} // `, mode: "insensitive" as const } },
-      ]),
+      OR: names.flatMap((name) => {
+        const normalized = normalizeCardName(name);
+        return [
+          { name: { equals: normalized, mode: "insensitive" as const } },
+          // So a face da frente de uma carta de duas faces.
+          { name: { startsWith: `${normalized} // `, mode: "insensitive" as const } },
+        ];
+      }),
     },
   });
   cached.forEach(remember);

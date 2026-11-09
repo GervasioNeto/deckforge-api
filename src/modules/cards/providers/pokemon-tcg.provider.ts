@@ -26,17 +26,17 @@ const POKEMON_TCG_HEADERS: Record<string, string> = env.pokemonTcgApiKey
   : { Accept: "application/json" };
 
 // A API anda instavel: boa parte das chamadas volta 500/502 na hora (em ~0,3s)
-// e passa numa nova tentativa. Sem repetir, um import de 3 lotes quase nunca
-// fechava. Timeout nao entra: cada um ja custou 10s.
+// ou limite 429 e passa numa nova tentativa com backoff exponencial. Sem repetir,
+// um import de 3 lotes quase nunca fechava. Timeout nao entra: cada um ja custou 10s.
 export const POKEMON_TCG_ATTEMPTS = 6;
 export const POKEMON_TCG_RETRY_DELAY_MS = 300;
-const RETRYABLE_STATUSES = new Set([500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 type Attempt = { ok: true; data: any } | { ok: false; error: HttpError; retryable: boolean };
 
 // Timeout ou falha de rede. O erro original vai no `cause`, pra aparecer no log.
 function upstreamError(error: unknown): HttpError {
-  const timedOut = error instanceof Error && error.name === "TimeoutError";
+  const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
   const upstream = timedOut
     ? new HttpError(504, `A Pokémon TCG API não respondeu em ${POKEMON_TCG_TIMEOUT_MS / 1000}s.`, "UPSTREAM_ERROR")
     : new HttpError(502, "Não foi possível consultar a Pokémon TCG API.", "UPSTREAM_ERROR");
@@ -58,9 +58,14 @@ async function attemptRequest(path: string, notFoundMessage?: string): Promise<A
       if (response.status === 404 && notFoundMessage) {
         return { ok: false, error: new HttpError(404, notFoundMessage, "CARD_NOT_FOUND"), retryable: false };
       }
+      const isRateLimit = response.status === 429;
       return {
         ok: false,
-        error: new HttpError(502, `Pokémon TCG API respondeu ${response.status}.`, "UPSTREAM_ERROR"),
+        error: new HttpError(
+          isRateLimit ? 429 : 502,
+          isRateLimit ? "Limite de requisições da Pokémon TCG API atingido." : `Pokémon TCG API respondeu ${response.status}.`,
+          "UPSTREAM_ERROR",
+        ),
         retryable: RETRYABLE_STATUSES.has(response.status),
       };
     }
@@ -82,8 +87,9 @@ async function pokemonTcgRequest(path: string, notFoundMessage?: string) {
     if (!result.retryable || attempt >= POKEMON_TCG_ATTEMPTS) {
       throw result.error;
     }
-    // Espera um pouco mais a cada vez (0,3s, 0,6s, 0,9s...).
-    await new Promise((resolve) => setTimeout(resolve, POKEMON_TCG_RETRY_DELAY_MS * attempt));
+    // Backoff exponencial: 300ms, 600ms, 1200ms, 2400ms...
+    const delay = POKEMON_TCG_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 }
 
@@ -100,12 +106,22 @@ function searchPath(
   return `/cards?${params.join("&")}`;
 }
 
+// Normaliza espacos multiplos, apostrofos e aspas tipograficas para casar com a API.
+export function sanitizeCardName(name: string): string {
+  return name
+    .trim()
+    .replace(/[\u2018\u2019\u0060\u00B4]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/\s+/g, " ");
+}
+
 // O `!` pede o nome exato: so `name:"Charizard"` tambem traz "Mega Charizard
 // Y ex", que viria primeiro por ser mais nova. Aspas fechariam a frase antes
 // da hora - nenhum nome de carta tem.
-const exactName = (name: string) => `!name:"${name.replace(/"/g, "")}"`;
+export const exactName = (name: string) => `!name:"${sanitizeCardName(name).replace(/"/g, "")}"`;
 
-const nameKey = (name: string) => name.trim().toLowerCase();
+export const nameKey = (name: string) => sanitizeCardName(name).toLowerCase();
 
 export async function getPokemonCardById(externalId: string) {
   const data = await pokemonTcgRequest(
@@ -117,12 +133,13 @@ export async function getPokemonCardById(externalId: string) {
 
 // A impressao mais recente com esse nome.
 export async function searchPokemonCardByName(name: string) {
-  const data = await pokemonTcgRequest(searchPath(exactName(name), { pageSize: 1 }));
+  const sanitized = sanitizeCardName(name);
+  const data = await pokemonTcgRequest(searchPath(exactName(sanitized), { pageSize: 1 }));
 
   // Busca sem resultado nao e' 404: vem 200 com a lista vazia.
   const [card] = data.data ?? [];
   if (!card) {
-    throw new HttpError(404, `Carta '${name}' não encontrada.`, "CARD_NOT_FOUND");
+    throw new HttpError(404, `Carta '${sanitized}' não encontrada.`, "CARD_NOT_FOUND");
   }
   return card;
 }
@@ -130,7 +147,8 @@ export async function searchPokemonCardByName(name: string) {
 // Todas as impressoes de uma carta, da mais nova pra mais antiga (so a
 // primeira pagina, ate 250).
 export async function searchPokemonCardPrints(name: string): Promise<any[]> {
-  const data = await pokemonTcgRequest(searchPath(exactName(name)));
+  const sanitized = sanitizeCardName(name);
+  const data = await pokemonTcgRequest(searchPath(exactName(sanitized)));
   return data.data ?? [];
 }
 
@@ -152,8 +170,9 @@ export async function getPokemonCardsByNames(names: string[]): Promise<{ cards: 
 
     // Ja vem da mais nova pra mais antiga: a primeira de cada nome fica.
     for (const card of page) {
-      if (!newest.has(nameKey(card.name))) {
-        newest.set(nameKey(card.name), card);
+      const key = nameKey(card.name);
+      if (!newest.has(key)) {
+        newest.set(key, card);
       }
     }
 

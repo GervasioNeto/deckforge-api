@@ -62,6 +62,24 @@ describe("getPokemonCardsByNames", () => {
     expect(cards.map((card) => card.id)).toEqual(["pikachu-1", "raichu-1"]);
     expect(notFound).toEqual([]);
   });
+
+  it("sanitiza pontuação e múltiplos espaços casando nomes importados com apóstrofo tipográfico", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        data: [
+          { id: "boss-1", name: "Boss's Orders" },
+          { id: "ultra-1", name: "Ultra Ball" },
+        ],
+        totalCount: 2,
+      }),
+    );
+
+    const { cards, notFound } = await getPokemonCardsByNames(["Boss’s Orders", "  Ultra   Ball  "]);
+
+    expect(searchParams(0).get("q")).toBe('!name:"Boss\'s Orders" OR !name:"Ultra Ball"');
+    expect(cards.map((c) => c.id)).toEqual(["boss-1", "ultra-1"]);
+    expect(notFound).toEqual([]);
+  });
 });
 
 describe("autocompletePokemonCardNames", () => {
@@ -91,13 +109,13 @@ describe("autocompletePokemonCardNames", () => {
 });
 
 describe("searchPokemonCardPrints", () => {
-  it("lista as impressões do nome exato, da mais nova para a mais antiga", async () => {
+  it("lista as impressões do nome exato, da mais nova para a mais antiga, sanitizando o nome", async () => {
     fetchMock.mockResolvedValue(jsonResponse({ data: [{ id: "me55c-4" }, { id: "base1-4" }] }));
 
-    const prints = await searchPokemonCardPrints("Charizard");
+    const prints = await searchPokemonCardPrints("  Charizard   ex  ");
 
     expect(prints.map((card) => card.id)).toEqual(["me55c-4", "base1-4"]);
-    expect(searchParams().get("q")).toBe('!name:"Charizard"');
+    expect(searchParams().get("q")).toBe('!name:"Charizard ex"');
     expect(searchParams().get("orderBy")).toBe("-set.releaseDate");
   });
 });
@@ -116,6 +134,15 @@ describe("searchPokemonCardByName", () => {
     expect(params.get("pageSize")).toBe("1");
     expect(init.headers["X-Api-Key"]).toBe("chave-de-teste");
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("sanitiza apóstrofos e múltiplos espaços antes de consultar a API", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ data: [{ id: "pal-172", name: "Boss's Orders" }] }));
+
+    const card = await searchPokemonCardByName("  Boss’s   Orders  ");
+
+    expect(card.id).toBe("pal-172");
+    expect(searchParams().get("q")).toBe('!name:"Boss\'s Orders"');
   });
 
   it("transforma a lista vazia em CARD_NOT_FOUND", async () => {
@@ -193,8 +220,31 @@ describe("tentativas", () => {
     expect(fetchMock).toHaveBeenCalledTimes(POKEMON_TCG_ATTEMPTS);
   });
 
-  it("não repete um erro que não passa sozinho, como o limite de requisições", async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 429 } }, 429));
+  it("repete com backoff exponencial quando recebe rate limiting (429)", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 429 } }, 429))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: "base1-4" } }));
+
+    const request = getPokemonCardById("base1-4");
+    await vi.runAllTimersAsync();
+
+    await expect(request).resolves.toEqual({ id: "base1-4" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("desiste após esgotar tentativas em 429", async () => {
+    fetchMock.mockImplementation(async () => jsonResponse({ error: { code: 429 } }, 429));
+
+    const request = getPokemonCardById("base1-4");
+    const failed = expect(request).rejects.toMatchObject({ status: 429, code: "UPSTREAM_ERROR" });
+    await vi.runAllTimersAsync();
+
+    await failed;
+    expect(fetchMock).toHaveBeenCalledTimes(POKEMON_TCG_ATTEMPTS);
+  });
+
+  it("não repete um erro do cliente que não passa sozinho, como 400", async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: { code: 400 } }, 400));
 
     await expect(getPokemonCardById("base1-4")).rejects.toMatchObject({ code: "UPSTREAM_ERROR" });
     expect(fetchMock).toHaveBeenCalledTimes(1);

@@ -138,6 +138,51 @@ describe("mapPokemonCard", () => {
     expect(card.legalities).toEqual({ standard: "legal", expanded: "legal", unlimited: "legal" });
   });
 
+  it("interpreta legalidades de forma case-insensitive e aceita variações da API", () => {
+    const card = mapPokemonCard({
+      ...charizard,
+      legalities: {
+        standard: "legal",
+        expanded: "BANNED",
+        unlimited: "Not Legal",
+      },
+    });
+
+    expect(card.legalities).toEqual({
+      standard: "legal",
+      expanded: "banned",
+      unlimited: "not_legal",
+    });
+  });
+
+  it("faz fallback para small quando large estiver ausente ou vazio", () => {
+    const cardWithoutLarge = mapPokemonCard({
+      ...charizard,
+      images: {
+        small: "https://images.pokemontcg.io/base1/4.png",
+        large: "",
+      },
+    });
+
+    expect(cardWithoutLarge.imageUrl).toBe("https://images.pokemontcg.io/base1/4.png");
+  });
+
+  it("retorna imageUrl null quando não há imagens válidas sem quebrar", () => {
+    const cardNoImages = mapPokemonCard({
+      ...charizard,
+      images: null,
+    });
+
+    expect(cardNoImages.imageUrl).toBeNull();
+
+    const cardEmptyImages = mapPokemonCard({
+      ...charizard,
+      images: { small: "   ", large: null },
+    });
+
+    expect(cardEmptyImages.imageUrl).toBeNull();
+  });
+
   it("mapeia um Treinador, sem os campos de Pokémon e com a carta banida no Expanded", () => {
     const card = mapPokemonCard(lysandresTrumpCard);
 
@@ -170,5 +215,19 @@ describe("mapPokemonCard", () => {
     });
 
     expect(card.attacks[0]).toEqual({ name: "Tail Whip", cost: ["Colorless"], damage: null, text: null });
+  });
+
+  it("suporta objeto cru incompleto ou vazio sem lançar erro", () => {
+    const card = mapPokemonCard({});
+
+    expect(card.id).toBe("");
+    expect(card.name).toBe("");
+    expect(card.imageUrl).toBeNull();
+    expect(card.typeLine).toBe("");
+    expect(card.legalities).toEqual({
+      standard: "not_legal",
+      expanded: "not_legal",
+      unlimited: "not_legal",
+    });
   });
 });
